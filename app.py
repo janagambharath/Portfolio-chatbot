@@ -2,17 +2,22 @@ from flask import Flask, render_template, request, jsonify
 import json
 import os
 from openai import OpenAI
+from dotenv import load_dotenv
 
 app = Flask(__name__)
+
+# Load .env file
+load_dotenv()
+API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Load portfolio info
 with open("portfolio.json", "r") as f:
     portfolio_data = json.load(f)
 
-# OpenRouter client (use your API key)
+# OpenRouter client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ.get("OPENROUTER_API_KEY")  # safer than hardcoding
+    api_key=API_KEY
 )
 
 # Chat history
