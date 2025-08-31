@@ -2,63 +2,499 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Bharath Chatbot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bharath Ai</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial; background: #121212; color: #eee; padding: 20px; }
-        #chat { max-width: 600px; margin: auto; }
-        .user { color: #00f; margin: 5px 0; }
-        .bot { color: #0f0; margin: 5px 0; }
-        input { width: 80%; padding: 8px; }
-        button { padding: 8px; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin: 20px;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chat-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 2px,
+                rgba(255,255,255,0.1) 2px,
+                rgba(255,255,255,0.1) 4px
+            );
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .chat-header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .chat-header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: linear-gradient(to bottom, #f8fafc, #e2e8f0);
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+            transition: background 0.3s;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .message {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            animation: messageSlide 0.5s ease-out;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: white;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        }
+
+        .message.bot .message-avatar {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            position: relative;
+        }
+
+        .message.bot .message-avatar.typing {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .message-content {
+            max-width: 75%;
+            padding: 18px 22px;
+            border-radius: 20px;
+            position: relative;
+            line-height: 1.6;
+            font-size: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.bot .message-content {
+            background: white;
+            color: #2d3748;
+            border-bottom-left-radius: 5px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #4facfe;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .chat-input {
+            padding: 25px 30px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .input-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #messageInput {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        #messageInput:focus {
+            border-color: #4facfe;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        #sendButton {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
+            min-width: 120px;
+        }
+
+        #sendButton:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+        }
+
+        #sendButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #64748b;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .welcome-message i {
+            font-size: 3rem;
+            color: #4facfe;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .word-animation {
+            display: inline;
+            opacity: 0;
+            animation: wordFade 0.1s ease-in forwards;
+        }
+
+        @keyframes wordFade {
+            to {
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                height: 100vh;
+                margin: 0;
+                border-radius: 0;
+            }
+            
+            .chat-header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .message-content {
+                max-width: 85%;
+                padding: 15px 18px;
+            }
+            
+            .chat-messages {
+                padding: 20px;
+            }
+            
+            .chat-input {
+                padding: 20px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div id="chat"></div>
-    <input type="text" id="message" placeholder="Type your message">
-    <button onclick="sendMessage()">Send</button>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1><i class="fas fa-robot"></i> Bharath's Ai</h1>
+            <p>Ask me anything about my skills, experience, and projects!</p>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <i class="fas fa-comments"></i>
+                <p>Welcome! I'm your Bharath Ai assistant. I can help you learn about my background, skills, projects, and experience. Feel free to ask me anything!</p>
+            </div>
+        </div>
+        
+        <div class="chat-input">
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="Ask me about my portfolio, skills, projects..." />
+            </div>
+            <button id="sendButton" onclick="sendMessage()">
+                <i class="fas fa-paper-plane"></i> Send
+            </button>
+        </div>
+    </div>
 
     <script>
-        const chatDiv = document.getElementById("chat");
+        let isTyping = false;
+
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !isTyping) {
+                sendMessage();
+            }
+        });
 
         async function sendMessage() {
-            const messageInput = document.getElementById("message");
-            const userMessage = messageInput.value.trim();
-            if (!userMessage) return;
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            const sendButton = document.getElementById('sendButton');
+            
+            if (message === '' || isTyping) return;
 
-            // Append user message
-            const userDiv = document.createElement("div");
-            userDiv.className = "user";
-            userDiv.textContent = "You: " + userMessage;
-            chatDiv.appendChild(userDiv);
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-            messageInput.value = "";
+            // Clear welcome message
+            const welcomeMsg = document.querySelector('.welcome-message');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
 
-            // Append bot message div
-            const botDiv = document.createElement("div");
-            botDiv.className = "bot";
-            botDiv.textContent = "Bot: ";
-            chatDiv.appendChild(botDiv);
+            // Add user message
+            addMessage(message, 'user');
+            input.value = '';
+            
+            // Disable input and button
+            input.disabled = true;
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            isTyping = true;
 
-            // Fetch streamed response
-            const response = await fetch("/ask", {
-                method: "POST",
-                body: JSON.stringify({ message: userMessage }),
-                headers: { "Content-Type": "application/json" }
-            });
+            // Add typing indicator
+            const typingMessage = addMessage('', 'bot', true);
+            
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let done = false;
-
-            while (!done) {
-                const { value, done: doneReading } = await reader.read();
-                done = doneReading;
-                if (value) {
-                    botDiv.textContent += decoder.decode(value);
-                    chatDiv.scrollTop = chatDiv.scrollHeight;
-                }
+                const data = await response.json();
+                
+                // Remove typing indicator
+                typingMessage.remove();
+                
+                // Add bot response with word-by-word animation
+                await addStreamingMessage(data.reply, 'bot');
+                
+            } catch (error) {
+                typingMessage.remove();
+                addMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                console.error('Error:', error);
+            } finally {
+                // Re-enable input and button
+                input.disabled = false;
+                sendButton.disabled = false;
+                sendButton.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+                isTyping = false;
+                input.focus();
             }
         }
+
+        function addMessage(message, sender, isTyping = false) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = `message-avatar ${isTyping ? 'typing' : ''}`;
+            
+            if (sender === 'user') {
+                avatar.innerHTML = '<i class="fas fa-user"></i>';
+            } else {
+                avatar.innerHTML = '<i class="fas fa-robot"></i>';
+            }
+
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            
+            if (isTyping) {
+                content.innerHTML = `
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                `;
+            } else {
+                content.textContent = message;
+            }
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(content);
+            messagesContainer.appendChild(messageDiv);
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        async function addStreamingMessage(message, sender) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.innerHTML = '<i class="fas fa-robot"></i>';
+
+            const content = document.createElement('div');
+            content.className = 'message-content';
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(content);
+            messagesContainer.appendChild(messageDiv);
+
+            // Split message into words
+            const words = message.split(' ');
+            
+            for (let i = 0; i < words.length; i++) {
+                const wordSpan = document.createElement('span');
+                wordSpan.className = 'word-animation';
+                wordSpan.textContent = words[i] + (i < words.length - 1 ? ' ' : '');
+                content.appendChild(wordSpan);
+                
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                
+                // Delay between words (adjust speed here)
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        }
+
+        // Initial focus on input
+        document.getElementById('messageInput').focus();
     </script>
 </body>
 </html>
