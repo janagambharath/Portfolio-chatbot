@@ -25,24 +25,21 @@ app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
 
 # Environment variables
-API_KEY = os.getenv("OPENROUTER_API_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 HOST = os.getenv("HOST", "0.0.0.0")
 
-# Initialize OpenRouter client for DeepSeek R1
+# Initialize DeepSeek client using GitHub token
 client = None
 try:
-    if API_KEY:
-        from openai import OpenAI
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=API_KEY
-        )
-        logger.info("✅ OpenRouter client initialized successfully")
+    if GITHUB_TOKEN:
+        from deepsake import DeepSeek  # Make sure deepsake library is installed
+        client = DeepSeek(auth_token=GITHUB_TOKEN)
+        logger.info("✅ DeepSeek client initialized successfully with GitHub token")
     else:
-        logger.warning("⚠️ No API key found - running in fallback mode")
+        logger.warning("⚠️ No GitHub token found - running in fallback mode")
 except Exception as e:
-    logger.error(f"❌ Error initializing OpenRouter client: {e}")
+    logger.error(f"❌ Error initializing DeepSeek client: {e}")
     client = None
 
 # Default portfolio data
@@ -110,17 +107,14 @@ Portfolio data: {json.dumps(portfolio_data)}"""
 # Fallback response if API unavailable
 def get_smart_fallback_response(user_input):
     user_lower = user_input.lower()
-    # Programming help
     programming_keywords = ['code', 'programming', 'python', 'javascript', 'react', 'flask', 'html', 'css', 'debug', 'function', 'algorithm']
     if any(k in user_lower for k in programming_keywords):
         return "💻 I can help with Python, Flask, React, debugging, and more! Please ask a specific programming question."
-    # Portfolio info
     portfolio_keywords = ['portfolio', 'skills', 'experience', 'projects', 'background', 'about you', 'resume', 'cv', 'work']
     if any(k in user_lower for k in portfolio_keywords):
         skills_text = ', '.join(portfolio_data['skills'])
         projects_text = '\n'.join([f"{p['name']}: {p['description']}" for p in portfolio_data['projects']])
         return f"📋 Portfolio Info:\nSkills: {skills_text}\nProjects:\n{projects_text}"
-    # General
     return f"🤖 Currently offline. You asked: '{user_input}'. I can still give programming, portfolio, or career guidance."
 
 # Routes
@@ -161,13 +155,8 @@ def ask():
                 for msg in recent_messages:
                     messages.append({"role": msg["role"], "content": msg["content"]})
                 
-                response = client.chat.completions.create(
-                    model="deepseek-r1:free",
-                    messages=messages,
-                    max_tokens=600,
-                    temperature=0.7
-                )
-                bot_reply = response.choices[0].message.content.strip()
+                response = client.chat(messages=messages, max_tokens=600, temperature=0.7)
+                bot_reply = response['choices'][0]['message']['content'].strip()
                 api_success = True
             except Exception as api_error:
                 logger.error(f"API Error: {api_error}")
