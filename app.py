@@ -2,7 +2,6 @@ import os
 import logging
 import json
 from flask import Flask, render_template, request, jsonify
-from datetime import datetime
 
 # ----------------------------
 # Logging Configuration
@@ -72,10 +71,10 @@ except Exception as e:
 def home():
     return render_template('index.html', portfolio=portfolio_data)
 
-@app.route('/chat', methods=['POST'])
-def chat():
+@app.route('/ask', methods=['POST'])
+def ask():
     user_input = request.json.get('message', '')
-    response_text = "AI service not available."  # fallback
+    response_text = "AI service not available."
 
     if client:
         try:
@@ -89,7 +88,7 @@ def chat():
             logger.error(f"❌ Error in OpenRouter API call: {e}")
             response_text = "Error contacting AI service."
 
-    return jsonify({"response": response_text})
+    return jsonify({"reply": response_text})
 
 # ----------------------------
 # Run Flask App
