@@ -1,48 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bharath Portfolio Chatbot</title>
-<link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bharath Chatbot</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #1e1e1e; color: #fff; padding: 20px; }
+    #chat { max-width: 600px; margin: auto; border: 1px solid #333; padding: 10px; height: 400px; overflow-y: auto; }
+    .user { color: #4dd0e1; margin-bottom: 10px; }
+    .bot { color: #ffca28; margin-bottom: 10px; }
+    input { width: 80%; padding: 10px; border-radius: 5px; border: none; margin-right: 5px; }
+    button { padding: 10px; border-radius: 5px; border: none; background: #4dd0e1; color: #000; font-weight: bold; cursor: pointer; }
+  </style>
 </head>
 <body>
-<div id="chat-container">
-    <h2>Bharath Portfolio Chatbot</h2>
-    <div id="chatbox"></div>
-    <input type="text" id="user_input" placeholder="Type your message">
+  <h2>Bharath Chatbot</h2>
+  <div id="chat"></div>
+  <div>
+    <input type="text" id="message" placeholder="Type your message..." />
     <button onclick="sendMessage()">Send</button>
-</div>
+  </div>
 
-<script>
-async function sendMessage() {
-    const input = document.getElementById("user_input");
-    const message = input.value;
-    if (!message) return;
+  <script>
+    const chatDiv = document.getElementById("chat");
 
-    const chatbox = document.getElementById("chatbox");
-    const userDiv = document.createElement("div");
-    userDiv.className = "message user";
-    userDiv.innerText = message;
-    chatbox.appendChild(userDiv);
+    function sendMessage() {
+      const messageInput = document.getElementById("message");
+      const userMessage = messageInput.value.trim();
+      if (!userMessage) return;
+      
+      // Display user message
+      const userDiv = document.createElement("div");
+      userDiv.className = "user";
+      userDiv.textContent = "You: " + userMessage;
+      chatDiv.appendChild(userDiv);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
 
-    input.value = "";
+      messageInput.value = "";
 
-    const response = await fetch("/ask", {
+      // Stream bot response
+      const eventSource = new EventSource("/ask", { method: "POST", body: JSON.stringify({ message: userMessage }) });
+
+      let botDiv = document.createElement("div");
+      botDiv.className = "bot";
+      botDiv.textContent = "Bot: ";
+      chatDiv.appendChild(botDiv);
+
+      fetch("/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message })
-    });
-
-    const data = await response.json();
-
-    const botDiv = document.createElement("div");
-    botDiv.className = "message bot";
-    botDiv.innerText = data.reply;
-    chatbox.appendChild(botDiv);
-
-    chatbox.scrollTop = chatbox.scrollHeight;
-}
-</script>
+        body: JSON.stringify({ message: userMessage })
+      }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        function read() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            botDiv.textContent += decoder.decode(value);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            read();
+          });
+        }
+        read();
+      });
+    }
+  </script>
 </body>
 </html>
