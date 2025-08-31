@@ -48,7 +48,7 @@ portfolio_data = load_portfolio_data()
 chat_sessions = {}
 
 def call_ai_api(messages):
-    """Direct API call"""
+    """Direct API call with increased token limit"""
     if not API_KEY:
         raise Exception("No API key")
     
@@ -61,7 +61,7 @@ def call_ai_api(messages):
     data = {
         "model": "deepseek/deepseek-chat-v3.1:free",
         "messages": messages,
-        "max_tokens": 200,  # SHORTER RESPONSES
+        "max_tokens": 350,  # INCREASED for medium-length responses
         "temperature": 0.7
     }
     
@@ -73,35 +73,40 @@ def call_ai_api(messages):
         raise Exception(f"API Error: {response.status_code}")
 
 def get_system_prompt():
-    """CONCISE system prompt"""
-    return f"""You are Bharath's AI assistant. Keep responses SHORT and conversational (2-3 sentences max).
+    """Enhanced system prompt for medium-length responses"""
+    return f"""You are Bharath's AI assistant. Keep responses conversational and informative (3-5 sentences, around 40-60 words).
 
 Portfolio data: {json.dumps(portfolio_data)}
 
 Guidelines:
-- Be friendly and concise
-- Answer directly without long explanations
-- For portfolio questions, give brief, relevant info
-- For general questions, provide helpful but short answers
+- Be friendly, helpful, and engaging
+- Provide detailed but not overwhelming answers
+- For portfolio questions, give comprehensive but concise info with context
+- For general questions, provide useful explanations with examples when helpful
+- Add personality and enthusiasm to make conversations more engaging
 - Don't use markdown formatting or bullet points
-- Keep it conversational and natural"""
+- Keep it natural and conversational, like talking to a friend
+- Share relevant details that show expertise without being verbose"""
 
-def get_short_fallback(user_input):
-    """Short fallback responses"""
+def get_enhanced_fallback(user_input):
+    """Enhanced fallback responses with more detail"""
     user_lower = user_input.lower()
     
     if any(word in user_lower for word in ['portfolio', 'skills', 'experience', 'projects', 'about', 'who']):
         skills = ', '.join(portfolio_data.get('skills', [])[:5])
-        return f"I'm {portfolio_data.get('name', 'Bharath')}, an {portfolio_data.get('title', 'aspiring AI engineer')} from {portfolio_data.get('location', 'Hyderabad')}. My main skills are {skills}. I've built projects like a billing system in C and this portfolio website. What would you like to know more about?"
+        return f"I'm {portfolio_data.get('name', 'Bharath')}, an {portfolio_data.get('title', 'aspiring AI engineer')} based in {portfolio_data.get('location', 'Hyderabad')}. I'm passionate about technology and have been building my skills in {skills}. My notable projects include a functional billing system built in C and this interactive portfolio website with Flask. I'm currently pursuing my B.Tech in CSE and love working on real-world applications. What specific aspect would you like to explore further?"
     
-    elif any(word in user_lower for word in ['learn', 'study', 'how']):
-        return f"Great question! I learned through online tutorials, hands-on projects, and lots of practice. Started with C programming, then moved to Python and web development. Building real projects like my billing system really helped solidify the concepts. What are you interested in learning?"
+    elif any(word in user_lower for word in ['learn', 'study', 'how', 'advice']):
+        return f"That's a great question! My learning journey has been quite hands-on and practical. I started with C programming fundamentals, which gave me a solid foundation in logic and problem-solving. Then I expanded to Python for its versatility and web development with Flask. I believe in learning by building - each project teaches you something new and helps you apply theoretical concepts. Online resources, documentation, and lots of experimentation have been my go-to approach. What technology or skill are you looking to dive into?"
     
-    elif any(word in user_lower for word in ['code', 'programming', 'python', 'help']):
-        return f"I'd be happy to help with programming! I work with Python, C, Flask, and web development. What specific coding challenge are you working on?"
+    elif any(word in user_lower for word in ['code', 'programming', 'python', 'help', 'development']):
+        return f"I'd be excited to help with programming! I work primarily with Python, C, Flask, and web technologies, plus I'm always exploring AI and chatbot development. Programming is like solving puzzles - each challenge teaches you new approaches and techniques. Whether it's debugging, algorithm design, or building user interfaces, I enjoy the problem-solving aspect. What specific coding challenge or concept are you working on? I'm here to share insights and help you work through it!"
+    
+    elif any(word in user_lower for word in ['project', 'build', 'create']):
+        return f"Projects are the best way to learn and showcase your skills! My billing system in C was a great exercise in understanding data structures and user interaction, while this portfolio website taught me web development and API integration. I always try to build something that solves a real problem or demonstrates a concept I'm learning. The key is starting with a clear goal and breaking it down into manageable steps. What kind of project are you thinking about building?"
     
     else:
-        return f"Hi! I'm Bharath's AI assistant. I can help with questions about my portfolio, programming, or general topics. What would you like to know?"
+        return f"Hello there! I'm Bharath's AI assistant, and I'm here to chat about my journey in tech, programming, projects, and anything else you're curious about. I love discussing technology, sharing learning experiences, and helping others navigate their own tech adventures. Whether you want to know about my portfolio, need programming advice, or just want to have an interesting conversation, I'm all ears! What's on your mind today?"
 
 @app.route("/")
 def index():
@@ -124,7 +129,7 @@ def index():
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    """Handle chat with SHORT responses"""
+    """Handle chat with medium-length responses"""
     try:
         data = request.get_json() or {}
         user_input = data.get("message", "").strip()
@@ -148,23 +153,23 @@ def ask():
             try:
                 messages = [
                     {"role": "system", "content": get_system_prompt()}
-                ] + chat_sessions[session_id][-6:]  # LESS CONTEXT = SHORTER RESPONSES
+                ] + chat_sessions[session_id][-8:]  # Slightly more context for better responses
                 
                 bot_reply = call_ai_api(messages)
                 api_success = True
                 
             except Exception as e:
                 print(f"API Error: {e}")
-                bot_reply = get_short_fallback(user_input)
+                bot_reply = get_enhanced_fallback(user_input)
         else:
-            bot_reply = get_short_fallback(user_input)
+            bot_reply = get_enhanced_fallback(user_input)
         
         # Add bot response
         chat_sessions[session_id].append({"role": "assistant", "content": bot_reply})
         
-        # Keep sessions small
-        if len(chat_sessions[session_id]) > 12:
-            chat_sessions[session_id] = chat_sessions[session_id][-12:]
+        # Keep sessions manageable
+        if len(chat_sessions[session_id]) > 16:
+            chat_sessions[session_id] = chat_sessions[session_id][-16:]
         
         return jsonify({
             "reply": bot_reply,
@@ -174,7 +179,7 @@ def ask():
         
     except Exception as e:
         return jsonify({
-            "reply": f"Hi! I'm {portfolio_data.get('name', 'Bharath')}'s AI assistant. What would you like to know?",
+            "reply": f"Hi there! I'm {portfolio_data.get('name', 'Bharath')}'s AI assistant. I'm here to chat about my tech journey, projects, skills, and help with any questions you might have. What would you like to know or discuss today?",
             "status": "error"
         }), 200
 
