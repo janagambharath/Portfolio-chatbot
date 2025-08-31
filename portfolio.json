@@ -1,0 +1,49 @@
+{
+  "personal_info": {
+    "name": "Bharath",
+    "role": "Student / Aspiring AI Engineer",
+    "email": "janagambharath1107@gmail.com",
+    "location": "Hyderabad, India",
+    "linkedin": "https://www.linkedin.com/in/janagam-bharath-9ab1b235b/",
+    "github": "https://github.com/janagambharath",
+    "resume": "https://bharath-portfolio-lvea.onrender.com/static/Janagam%20Bharath%20-%20Resume-1.pdf",
+    "website": "https://bharath-portfolio-lvea.onrender.com/"
+  },
+  "skills": [
+    "C Programming",
+    "Python",
+    "Flask",
+    "HTML",
+    "CSS",
+    "AI & Chatbots",
+    "DSA"
+  ],
+  "education": [
+    {
+      "degree": "Diploma in ECE",
+      "institution": "Your College Name",
+      "year": "Completed 2025"
+    },
+    {
+      "degree": "B.Tech CSE (via ECET)",
+      "institution": "Your University Name",
+      "year": "Starting 2025"
+    }
+  ],
+  "projects": [
+    {
+      "name": "Function-based Billing System",
+      "description": "A C-based billing system using functions."
+    },
+    {
+      "name": "Portfolio Website",
+      "description": "Flask-based personal portfolio website with interactive chatbot."
+    }
+  ],
+  "goals": [
+    "Become a skilled AI Engineer",
+    "Create interactive portfolio with chatbot",
+    "Build projects to showcase skills",
+    "Earn well and make parents proud"
+  ]
+}
