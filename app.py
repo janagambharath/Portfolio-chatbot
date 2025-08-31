@@ -1,98 +1,209 @@
 import os
 import logging
-import json
 from flask import Flask, render_template, request, jsonify
+import json
+from datetime import datetime
 
-# ----------------------------
-# Logging Configuration
-# ----------------------------
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# ----------------------------
-# Load Environment Variables
-# ----------------------------
+# Load environment variables
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    logger.info("python-dotenv not installed, using system environment variables")
+    logger.info("python-dotenv not available, using system environment variables")
 
-# ----------------------------
-# Flask App Initialization
-# ----------------------------
+# Flask app initialization
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'fallback-secret-key-2025')
 app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
 
-# ----------------------------
-# Environment Variables
-# ----------------------------
+# Environment variables
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
 HOST = os.getenv("HOST", "0.0.0.0")
 
-# ----------------------------
-# Initialize OpenRouter/OpenAI Client
-# ----------------------------
+# Initialize OpenRouter client for DeepSeek R1
 client = None
 try:
     if API_KEY:
         from openai import OpenAI
-        client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=API_KEY
+        )
         logger.info("✅ OpenRouter client initialized successfully")
     else:
         logger.warning("⚠️ No API key found - running in fallback mode")
-except ImportError as e:
-    logger.error(f"❌ OpenAI library not installed: {e}")
 except Exception as e:
-    logger.error(f"❌ Error initializing OpenAI client: {e}")
+    logger.error(f"❌ Error initializing OpenRouter client: {e}")
+    client = None
 
-# ----------------------------
-# Load Portfolio JSON
-# ----------------------------
-PORTFOLIO_FILE = "portfolio.json"
-try:
-    with open(PORTFOLIO_FILE, "r") as f:
-        portfolio_data = json.load(f)
-    logger.info("✅ Portfolio JSON loaded successfully")
-except Exception as e:
-    logger.error(f"❌ Could not load portfolio.json: {e}")
-    portfolio_data = {}
+# Default portfolio data
+DEFAULT_PORTFOLIO = {
+    "name": "AI Portfolio Assistant",
+    "title": "Full Stack Developer & AI Specialist",
+    "skills": ["Python", "JavaScript", "React", "Flask", "FastAPI",
+               "Machine Learning", "AI Development", "Node.js", 
+               "MongoDB", "PostgreSQL", "Docker", "AWS", "Git",
+               "HTML/CSS", "REST APIs", "Microservices"],
+    "experience": "5+ years of development experience",
+    "projects": [
+        {"name": "AI Chatbot Platform", "tech": "Python, OpenAI, Flask, React",
+         "description": "Intelligent conversational AI system with portfolio integration"},
+        {"name": "E-commerce Platform", "tech": "React, Node.js, MongoDB, Stripe",
+         "description": "Full-stack shopping platform with payment integration"},
+        {"name": "Data Analytics Dashboard", "tech": "Python, Pandas, Plotly, D3.js",
+         "description": "Real-time data visualization and analytics tool"},
+        {"name": "Task Management System", "tech": "Flask, SQLAlchemy, Bootstrap, jQuery",
+         "description": "Project management tool with team collaboration"},
+        {"name": "Weather Prediction API", "tech": "Python, Scikit-learn, FastAPI",
+         "description": "Machine learning API for weather forecasting"}
+    ],
+    "education": "Computer Science & AI/ML",
+    "location": "Available for remote work worldwide",
+    "contact": "Available through this chat interface",
+    "certifications": ["AWS Cloud Practitioner", "Google Analytics", "Python Institute PCAP"],
+    "languages": ["English (Native)", "Spanish (Conversational)"]
+}
 
-# ----------------------------
+# Load portfolio from file or fallback
+def load_portfolio():
+    try:
+        if os.path.exists("portfolio.json"):
+            with open("portfolio.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                logger.info("📊 Portfolio loaded from file")
+                return data
+        else:
+            logger.info("📊 Using default portfolio")
+            return DEFAULT_PORTFOLIO
+    except Exception as e:
+        logger.error(f"Error loading portfolio: {e}")
+        return DEFAULT_PORTFOLIO
+
+portfolio_data = load_portfolio()
+
+# In-memory session storage
+chat_sessions = {}
+MAX_SESSIONS = int(os.getenv('MAX_SESSIONS', '500'))
+
+def cleanup_old_sessions():
+    if len(chat_sessions) > MAX_SESSIONS:
+        keep_count = int(MAX_SESSIONS * 0.8)
+        sessions_to_keep = dict(list(chat_sessions.items())[-keep_count:])
+        chat_sessions.clear()
+        chat_sessions.update(sessions_to_keep)
+        logger.info(f"🧹 Cleaned up sessions, keeping {len(chat_sessions)} sessions")
+
+# System prompt
+def create_system_prompt():
+    return f"""You are an advanced AI assistant. Use portfolio info when relevant.
+Portfolio data: {json.dumps(portfolio_data)}"""
+
+# Fallback response if API unavailable
+def get_smart_fallback_response(user_input):
+    user_lower = user_input.lower()
+    # Programming help
+    programming_keywords = ['code', 'programming', 'python', 'javascript', 'react', 'flask', 'html', 'css', 'debug', 'function', 'algorithm']
+    if any(k in user_lower for k in programming_keywords):
+        return "💻 I can help with Python, Flask, React, debugging, and more! Please ask a specific programming question."
+    # Portfolio info
+    portfolio_keywords = ['portfolio', 'skills', 'experience', 'projects', 'background', 'about you', 'resume', 'cv', 'work']
+    if any(k in user_lower for k in portfolio_keywords):
+        skills_text = ', '.join(portfolio_data['skills'])
+        projects_text = '\n'.join([f"{p['name']}: {p['description']}" for p in portfolio_data['projects']])
+        return f"📋 Portfolio Info:\nSkills: {skills_text}\nProjects:\n{projects_text}"
+    # General
+    return f"🤖 Currently offline. You asked: '{user_input}'. I can still give programming, portfolio, or career guidance."
+
 # Routes
-# ----------------------------
-@app.route('/')
-def home():
-    return render_template('index.html', portfolio=portfolio_data)
+@app.route("/")
+def index():
+    try:
+        return render_template("index.html")
+    except Exception as e:
+        logger.error(f"Error serving index: {e}")
+        return "<h1>AI Portfolio Assistant</h1><p>Template not found.</p>"
 
-@app.route('/ask', methods=['POST'])
+@app.route("/ask", methods=["POST"])
 def ask():
-    user_input = request.json.get('message', '')
-    response_text = "AI service not available."
+    try:
+        if len(chat_sessions) > 100:
+            cleanup_old_sessions()
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data"}), 400
+        
+        user_input = data.get("message", "").strip()
+        session_id = data.get("session_id", f"session_{int(datetime.now().timestamp())}")
+        if not user_input:
+            return jsonify({"error": "Message cannot be empty"}), 400
+        
+        if session_id not in chat_sessions:
+            chat_sessions[session_id] = []
+        chat_sessions[session_id].append({"role": "user", "content": user_input})
+        
+        bot_reply = ""
+        api_success = False
+        
+        if client:
+            try:
+                messages = [{"role": "system", "content": create_system_prompt()}]
+                recent_messages = chat_sessions[session_id][-10:]
+                for msg in recent_messages:
+                    messages.append({"role": msg["role"], "content": msg["content"]})
+                
+                response = client.chat.completions.create(
+                    model="deepseek-r1:free",
+                    messages=messages,
+                    max_tokens=600,
+                    temperature=0.7
+                )
+                bot_reply = response.choices[0].message.content.strip()
+                api_success = True
+            except Exception as api_error:
+                logger.error(f"API Error: {api_error}")
+                bot_reply = get_smart_fallback_response(user_input)
+        else:
+            bot_reply = get_smart_fallback_response(user_input)
+        
+        chat_sessions[session_id].append({"role": "assistant", "content": bot_reply})
+        if len(chat_sessions[session_id]) > 50:
+            chat_sessions[session_id] = chat_sessions[session_id][-50:]
+        
+        return jsonify({
+            "reply": bot_reply,
+            "session_id": session_id,
+            "status": "success" if api_success else "fallback",
+            "api_available": api_success,
+            "message_count": len(chat_sessions[session_id])
+        })
+    except Exception as e:
+        logger.error(f"/ask error: {e}")
+        return jsonify({"reply": "❌ Error occurred, fallback mode.", "status": "error"}), 500
 
-    if client:
-        try:
-            resp = client.chat.completions.create(
-                model="deepsake",
-                messages=[{"role": "user", "content": user_input}],
-                temperature=0.7
-            )
-            response_text = resp.choices[0].message.content
-        except Exception as e:
-            logger.error(f"❌ Error in OpenRouter API call: {e}")
-            response_text = "Error contacting AI service."
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "healthy",
+        "api_available": bool(client),
+        "active_sessions": len(chat_sessions),
+        "timestamp": datetime.now().isoformat()
+    })
 
-    return jsonify({"reply": response_text})
+@app.route("/portfolio")
+def portfolio():
+    return jsonify({"portfolio": portfolio_data, "timestamp": datetime.now().isoformat()})
 
-# ----------------------------
-# Run Flask App
-# ----------------------------
+# Run app
 if __name__ == "__main__":
-    logger.info(f"🚀 Starting Flask app on {HOST}:{PORT}")
+    logger.info(f"Starting server on {HOST}:{PORT} (API available: {bool(client)})")
     app.run(host=HOST, port=PORT, debug=app.config['DEBUG'])
