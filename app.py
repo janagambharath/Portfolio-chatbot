@@ -19,32 +19,63 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
 
-# Portfolio data
-portfolio_data = {
-    "name": "AI Portfolio Assistant",
-    "title": "Full Stack Developer & AI Specialist",
-    "skills": ["Python", "JavaScript", "React", "Flask", "Node.js", "Machine Learning", "AI Development", "MongoDB", "PostgreSQL", "Docker", "AWS"],
-    "experience": "5+ years of development experience",
-    "projects": [
-        {
-            "name": "AI Chatbot Platform",
-            "tech": "Python, OpenAI, Flask, React",
-            "description": "Intelligent conversational AI with portfolio integration"
-        },
-        {
-            "name": "E-commerce Platform", 
-            "tech": "React, Node.js, MongoDB, Stripe",
-            "description": "Full-stack shopping platform with payment processing"
-        },
-        {
-            "name": "Data Analytics Dashboard",
-            "tech": "Python, Pandas, Plotly, D3.js",
-            "description": "Real-time data visualization and reporting tool"
-        }
-    ],
-    "education": "Computer Science & AI",
-    "contact": "Available through this chat"
-}
+# LOAD PORTFOLIO FROM JSON FILE
+def load_portfolio_from_file():
+    """Load portfolio data from portfolio.json file"""
+    
+    # Default fallback data
+    default_portfolio = {
+        "name": "AI Portfolio Assistant",
+        "title": "Full Stack Developer & AI Specialist",
+        "skills": ["Python", "JavaScript", "React", "Flask", "Node.js", "Machine Learning"],
+        "experience": "5+ years of development experience",
+        "projects": [
+            {
+                "name": "AI Chatbot Platform",
+                "tech": "Python, OpenAI, Flask, React",
+                "description": "Intelligent conversational AI with portfolio integration"
+            }
+        ],
+        "education": "Computer Science & AI",
+        "contact": "Available through this chat"
+    }
+    
+    # Try to load from different possible locations
+    possible_paths = [
+        "portfolio.json",           # Same directory as app.py
+        "./portfolio.json",         # Explicit current directory
+        "data/portfolio.json",      # In data folder
+        "static/portfolio.json",    # In static folder
+        os.path.join(os.getcwd(), "portfolio.json")  # Full path
+    ]
+    
+    for path in possible_paths:
+        try:
+            if os.path.exists(path):
+                print(f"✅ Found portfolio.json at: {path}")
+                with open(path, 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    print(f"✅ Loaded portfolio data: {len(data.get('projects', []))} projects")
+                    return data
+        except Exception as e:
+            print(f"❌ Error reading {path}: {e}")
+            continue
+    
+    # List all files in current directory for debugging
+    print("📁 Files in current directory:")
+    try:
+        current_files = os.listdir(".")
+        for file in current_files:
+            print(f"   - {file}")
+    except:
+        print("   Could not list files")
+    
+    print("⚠️ Using default portfolio data")
+    return default_portfolio
+
+# Load portfolio data on startup
+print("🔍 Loading portfolio data...")
+portfolio_data = load_portfolio_from_file()
 
 # Chat sessions
 chat_sessions = {}
@@ -75,25 +106,114 @@ def call_ai_api(messages):
         raise Exception(f"API Error: {response.status_code}")
 
 def get_system_prompt():
-    """System prompt for AI"""
+    """System prompt with actual portfolio data"""
     portfolio_text = json.dumps(portfolio_data, indent=2)
-    return f"You are an AI assistant. Help with any topic. When relevant, use portfolio info: {portfolio_text}"
+    return f"""You are an advanced AI assistant. You can help with ANY topic including:
 
-def get_fallback_response(user_input):
-    """Fallback when API unavailable"""
+- Programming and software development
+- Data science and machine learning
+- Web development and system design
+- Creative writing and problem-solving
+- General knowledge and current events
+- Academic and research questions
+- Career and business advice
+
+When relevant, use this portfolio information:
+{portfolio_text}
+
+Be helpful, knowledgeable, and conversational. Provide detailed responses with examples when appropriate."""
+
+def get_smart_fallback(user_input):
+    """Smart fallback responses using actual portfolio data"""
     user_lower = user_input.lower()
     
-    if any(word in user_lower for word in ['portfolio', 'skills', 'experience', 'projects']):
-        skills_text = ', '.join(portfolio_data['skills'])
-        projects_text = '\n'.join([f"• {p['name']}: {p['description']}" for p in portfolio_data['projects']])
+    # Portfolio questions
+    if any(word in user_lower for word in ['portfolio', 'skills', 'experience', 'projects', 'about', 'background', 'resume', 'cv']):
         
-        return f"PORTFOLIO OVERVIEW\n\nSkills: {skills_text}\n\nExperience: {portfolio_data['experience']}\n\nProjects:\n{projects_text}\n\nEducation: {portfolio_data['education']}\n\nWhat would you like to know more about?"
+        # Format skills
+        skills_text = ', '.join(portfolio_data.get('skills', []))
+        
+        # Format projects
+        projects_list = []
+        for project in portfolio_data.get('projects', []):
+            projects_list.append(f"• **{project.get('name', 'Project')}**: {project.get('description', 'No description')} (Tech: {project.get('tech', 'Various')})")
+        projects_text = '\n'.join(projects_list)
+        
+        return f"""📋 **MY PORTFOLIO OVERVIEW**
+
+**👨‍💻 Role**: {portfolio_data.get('title', 'Developer')}
+
+**🛠 Technical Skills**: 
+{skills_text}
+
+**💼 Experience**: {portfolio_data.get('experience', 'Professional experience in software development')}
+
+**🚀 Featured Projects**:
+{projects_text}
+
+**🎓 Education**: {portfolio_data.get('education', 'Computer Science background')}
+
+**📞 Contact**: {portfolio_data.get('contact', 'Available through this interface')}
+
+What specific aspect of my portfolio would you like to discuss in detail?"""
     
-    elif any(word in user_lower for word in ['code', 'programming', 'python', 'javascript', 'help']):
-        return "PROGRAMMING HELP\n\nI can assist with:\n• Python (Flask, Django, data science)\n• JavaScript (React, Node.js, modern ES6+)\n• Web development (HTML, CSS, APIs)\n• Debugging and best practices\n• Project architecture and planning\n\nWhat specific programming challenge can I help you with?"
+    # Programming questions  
+    elif any(word in user_lower for word in ['code', 'programming', 'python', 'javascript', 'react', 'flask', 'help', 'debug', 'error']):
+        
+        # Get programming skills from portfolio
+        prog_skills = [skill for skill in portfolio_data.get('skills', []) if any(tech in skill.lower() for tech in ['python', 'javascript', 'react', 'flask', 'node', 'html', 'css'])]
+        
+        return f"""💻 **PROGRAMMING ASSISTANCE**
+
+Based on my expertise in: {', '.join(prog_skills)}
+
+**🐍 Python Help**:
+• Flask/Django web applications
+• Data science and automation
+• API development and integration
+• Debugging and best practices
+
+**⚛️ JavaScript & React**:
+• Modern ES6+ JavaScript
+• React components and hooks
+• State management and events
+• Frontend development patterns
+
+**🌐 Web Development**:
+• Full-stack architecture
+• Database integration
+• REST API design
+• Responsive design with HTML/CSS
+
+**🔧 From My Project Experience**:
+I've built: {', '.join([p.get('name', 'Project') for p in portfolio_data.get('projects', [])])}
+
+**What specific coding challenge can I help you solve?** Share your code or describe the problem!"""
     
+    # General response
     else:
-        return f"Hello! I'm an AI assistant that can help with:\n\n• Programming and web development\n• Portfolio and career questions\n• Technical problem-solving\n• Learning guidance and tutorials\n\nYou asked: '{user_input}'\n\nWhat specific topic can I help you with today?"
+        project_count = len(portfolio_data.get('projects', []))
+        skills_count = len(portfolio_data.get('skills', []))
+        
+        return f"""🤖 **AI ASSISTANT READY!**
+
+You asked: *"{user_input}"*
+
+I'm here to help with any topic! My background includes:
+
+**💻 Technical Expertise**: {skills_count} different technologies and frameworks
+**🚀 Project Experience**: {project_count} major projects completed
+**🎯 Full-Stack Knowledge**: From frontend to backend to deployment
+
+**I can assist with**:
+• Programming and code debugging
+• Technical architecture and best practices
+• Portfolio questions and career advice
+• Learning guidance and tutorials
+• Creative problem-solving
+• General knowledge and research
+
+**What would you like to explore today?** Whether it's technical challenges, portfolio discussion, or any other topic!"""
 
 @app.route("/")
 def index():
@@ -101,14 +221,31 @@ def index():
     try:
         return render_template("index.html")
     except:
-        return '''
+        # Show portfolio info even without template
+        skills_preview = ', '.join(portfolio_data.get('skills', [])[:5])
+        return f'''
         <!DOCTYPE html>
         <html>
-        <head><title>AI Assistant</title></head>
-        <body style="font-family:Arial; padding:40px; text-align:center; background:#f5f5f5;">
-            <h1>🤖 AI Portfolio Assistant</h1>
-            <p>Backend is running successfully!</p>
-            <a href="/health" style="background:#007bff; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;">Health Check</a>
+        <head>
+            <title>AI Portfolio Assistant</title>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 40px; background: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
+                .btn {{ background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin: 5px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🤖 {portfolio_data.get('title', 'AI Assistant')}</h1>
+                <p><strong>Skills:</strong> {skills_preview}...</p>
+                <p><strong>Experience:</strong> {portfolio_data.get('experience', 'Professional developer')}</p>
+                <p><strong>Projects:</strong> {len(portfolio_data.get('projects', []))} completed</p>
+                <br>
+                <a href="/health" class="btn">System Health</a>
+                <a href="/portfolio" class="btn">Full Portfolio</a>
+                <a href="/test" class="btn">API Test</a>
+            </div>
         </body>
         </html>
         '''
@@ -143,13 +280,14 @@ def ask():
                 
                 bot_reply = call_ai_api(messages)
                 api_success = True
-                print("API call successful")
+                print("✅ API call successful")
                 
             except Exception as e:
-                print(f"API Error: {e}")
-                bot_reply = get_fallback_response(user_input)
+                print(f"❌ API Error: {e}")
+                bot_reply = get_smart_fallback(user_input)
         else:
-            bot_reply = get_fallback_response(user_input)
+            print("🔄 Using fallback (no API key)")
+            bot_reply = get_smart_fallback(user_input)
         
         # Add bot response
         chat_sessions[session_id].append({"role": "assistant", "content": bot_reply})
@@ -161,51 +299,76 @@ def ask():
         return jsonify({
             "reply": bot_reply,
             "session_id": session_id,
-            "status": "success" if api_success else "fallback"
+            "status": "success" if api_success else "fallback",
+            "portfolio_loaded": bool(portfolio_data),
+            "projects_count": len(portfolio_data.get('projects', []))
         })
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error in ask endpoint: {e}")
         return jsonify({
-            "reply": "I'm here to help! Ask me about programming, my portfolio, or any technical topics.",
+            "reply": f"I'm here to help! I have {len(portfolio_data.get('projects', []))} projects in my portfolio. Ask me about programming, my experience, or any technical topics!",
             "status": "error"
         }), 200
 
 @app.route("/health")
 def health():
-    """Health check"""
-    api_status = "available" if API_KEY else "missing"
-    
+    """Health check with portfolio info"""
     return jsonify({
         "status": "healthy",
-        "api_key": api_status,
-        "portfolio_loaded": True,
+        "api_key_configured": bool(API_KEY),
+        "portfolio_loaded": bool(portfolio_data),
+        "portfolio_source": "portfolio.json file" if portfolio_data.get('name') != "AI Portfolio Assistant" else "default data",
+        "projects_count": len(portfolio_data.get('projects', [])),
+        "skills_count": len(portfolio_data.get('skills', [])),
         "sessions": len(chat_sessions),
         "timestamp": datetime.now().isoformat()
     })
 
 @app.route("/portfolio")
 def portfolio():
-    """Portfolio data"""
-    return jsonify(portfolio_data)
+    """Full portfolio data"""
+    return jsonify({
+        "portfolio": portfolio_data,
+        "source": "Loaded from portfolio.json" if portfolio_data.get('name') != "AI Portfolio Assistant" else "Using default data",
+        "timestamp": datetime.now().isoformat()
+    })
 
-@app.route("/test")
-def test_api():
-    """Test API connection"""
-    if not API_KEY:
-        return jsonify({"status": "no_api_key", "message": "Set OPENROUTER_API_KEY in environment"})
+@app.route("/reload_portfolio")
+def reload_portfolio():
+    """Reload portfolio.json file"""
+    global portfolio_data
+    print("🔄 Reloading portfolio data...")
+    portfolio_data = load_portfolio_from_file()
+    return jsonify({
+        "status": "reloaded",
+        "projects_count": len(portfolio_data.get('projects', [])),
+        "skills_count": len(portfolio_data.get('skills', []))
+    })
+
+@app.route("/debug")
+def debug():
+    """Debug endpoint to see file structure"""
+    debug_info = {
+        "current_directory": os.getcwd(),
+        "files_in_directory": [],
+        "portfolio_data_preview": {
+            "name": portfolio_data.get('name'),
+            "projects_count": len(portfolio_data.get('projects', [])),
+            "skills_count": len(portfolio_data.get('skills', []))
+        }
+    }
     
     try:
-        test_messages = [
-            {"role": "user", "content": "Say hello"}
-        ]
-        result = call_ai_api(test_messages)
-        return jsonify({"status": "success", "response": result})
-    except Exception as e:
-        return jsonify({"status": "failed", "error": str(e)})
+        debug_info["files_in_directory"] = os.listdir(".")
+    except:
+        debug_info["files_in_directory"] = ["Could not list files"]
+    
+    return jsonify(debug_info)
 
 if __name__ == "__main__":
-    print("Starting AI Assistant...")
-    print(f"API Key: {'Configured' if API_KEY else 'Missing'}")
-    print(f"Port: {PORT}")
+    print("🚀 Starting AI Portfolio Assistant...")
+    print(f"🔑 API Key: {'✅ Configured' if API_KEY else '❌ Missing'}")
+    print(f"📊 Portfolio: {len(portfolio_data.get('projects', []))} projects loaded")
+    print(f"🌐 Port: {PORT}")
     app.run(host="0.0.0.0", port=PORT)
