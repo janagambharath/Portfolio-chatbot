@@ -5,10 +5,6 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from flask import send_from_directory
 
-@app.route('/googlefa59b4f8aa.html')
-def google_verify():
-    return send_from_directory('static', 'googlefa59b4f8aa.html')
-
 # Load environment variables
 try:
     from dotenv import load_dotenv
@@ -23,6 +19,11 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 # Configuration
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
+
+# Google verification route
+@app.route('/googlefa59b4f8aa.html')
+def google_verify():
+    return send_from_directory('static', 'googlefa59b4f8aa.html')
 
 # Load portfolio from JSON file
 def load_portfolio_data():
@@ -132,6 +133,11 @@ def index():
         </html>
         '''
 
+# Simple home route (from the first app)
+@app.route('/home')
+def home():
+    return "Hello, world!"
+
 @app.route("/ask", methods=["POST"])
 def ask():
     """Handle chat with medium-length responses"""
@@ -207,4 +213,4 @@ def portfolio():
 if __name__ == "__main__":
     print(f"🚀 Starting {portfolio_data.get('name', 'Bharath')}'s AI Assistant")
     print(f"📊 {len(portfolio_data.get('projects', []))} projects loaded")
-    app.run(host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=PORT, debug=True)
