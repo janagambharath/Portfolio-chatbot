@@ -3,6 +3,11 @@ import json
 import requests
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
+from flask import send_from_directory
+
+@app.route('/googlefa59b4f8aa.html')
+def google_verify():
+    return send_from_directory('static', 'googlefa59b4f8aa.html')
 
 # Load environment variables
 try:
