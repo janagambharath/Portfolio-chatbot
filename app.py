@@ -1,118 +1,113 @@
 # app.py
+"""
+Flask chatbot server using OpenRouter (deepseek/deepseek-chat-v3.1:free).
+
+Environment variables:
+- OPENROUTER_API_KEY  (required to use the API; app runs with fallback if missing)
+- PORT                (optional, default 10000)
+- SITE_URL            (optional, used as HTTP-Referer header)
+- SITE_NAME           (optional, used as X-Title header)
+- PORTFOLIO_FILE      (optional, default portfolio.json)
+- SESSIONS_FILE       (optional, default chat_sessions.json)
+
+Run:
+    python app.py
+"""
+
 import os
 import json
 import time
 import atexit
 import logging
-from logging.handlers import RotatingFileHandler
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import wraps
-from flask import Flask, request, jsonify, render_template, send_from_directory, g
-from openai import OpenAI  # using OpenAI client pointed at openrouter (as in your original)
 
-# ====== Configuration ======
-ENV = os.getenv("FLASK_ENV", "production")
+import requests
+from flask import Flask, request, jsonify, render_template, send_from_directory
+
+# ---- Configuration ----
 PORT = int(os.getenv("PORT", 10000))
 SITE_URL = os.getenv("SITE_URL", "https://bharath-portfolio-lvea.onrender.com/")
 SITE_NAME = os.getenv("SITE_NAME", "Bharath's AI Portfolio")
-API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-SESSIONS_FILE = os.getenv("SESSIONS_FILE", "chat_sessions.json")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 PORTFOLIO_FILE = os.getenv("PORTFOLIO_FILE", "portfolio.json")
-RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))  # seconds
-RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "30"))  # max requests per window per IP
+SESSIONS_FILE = os.getenv("SESSIONS_FILE", "chat_sessions.json")
 MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "16"))
-MAX_API_RETRIES = int(os.getenv("MAX_API_RETRIES", "2"))
+RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
+RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "30"))
 
-# ====== App init ======
+# ---- Logging ----
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger("bharath_ai_app")
+
+# ---- App init ----
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "replace-with-a-secret")
+app.config["JSON_SORT_KEYS"] = False
 
-# ====== Logging ======
-logger = logging.getLogger("bharath_ai_assistant")
-logger.setLevel(logging.DEBUG if ENV == "development" else logging.INFO)
-console = logging.StreamHandler()
-console.setLevel(logging.DEBUG)
-logger.addHandler(console)
-file_handler = RotatingFileHandler("assistant.log", maxBytes=2_000_000, backupCount=3)
-file_handler.setLevel(logging.DEBUG)
-logger.addHandler(file_handler)
-
-# ====== Simple in-memory stores ======
-chat_sessions = {}           # session_id -> list of messages (dicts with role+content)
-rate_limits = {}             # ip -> {"count": int, "window_start": timestamp}
+# ---- In-memory stores ----
+chat_sessions = {}
+rate_limits = {}
 startup_time = datetime.utcnow()
 
-# ====== Load / persist portfolio ======
+# ---- Helpers: load/save JSON ----
 def load_json_file(path, default):
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        logger.warning(f"{path} not found, using default.")
+        logger.info("File not found: %s (using default)", path)
         return default
     except Exception as e:
-        logger.exception(f"Failed to load {path}: {e}")
+        logger.exception("Error loading %s: %s", path, e)
         return default
 
 def save_json_file(path, data):
     try:
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
     except Exception as e:
-        logger.exception(f"Failed to save {path}: {e}")
+        logger.exception("Failed to save %s: %s", path, e)
         return False
 
-portfolio_data = load_json_file(PORTFOLIO_FILE, {
+# ---- Load portfolio ----
+default_portfolio = {
     "personal_info": {
         "name": "Bharath",
         "role": "Aspiring AI Engineer",
         "location": "Hyderabad, India",
-        "email": "",
-        "linkedin": "",
-        "github": ""
+        "email": "janagambharath1107@gmail.com",
+        "linkedin": "https://www.linkedin.com/in/janagam-bharath-9ab1b235b/",
+        "github": "https://github.com/janagambharath"
     },
     "skills": ["Python", "C", "Flask", "HTML", "CSS", "AI & Chatbots", "DSA"],
     "projects": [
         {"name": "Billing System", "description": "Function-based billing system"},
         {"name": "Portfolio Website", "description": "Personal website with chatbot"}
-    ]
-})
+    ],
+    "youtube": {"channel_name": "Bharath Ai", "focus": "AI and Python tutorials"}
+}
 
-# Try to restore sessions if file exists
-_restored_sessions = load_json_file(SESSIONS_FILE, {})
-if isinstance(_restored_sessions, dict):
-    chat_sessions.update(_restored_sessions)
-    logger.info(f"Restored {len(chat_sessions)} sessions from {SESSIONS_FILE}")
+portfolio_data = load_json_file(PORTFOLIO_FILE, default_portfolio)
 
-# Save sessions on exit
+# Try restore sessions on startup
+_restored = load_json_file(SESSIONS_FILE, {})
+if isinstance(_restored, dict):
+    chat_sessions.update(_restored)
+    logger.info("Restored %d sessions from %s", len(chat_sessions), SESSIONS_FILE)
+
+# Persist sessions on exit
 def persist_sessions_on_exit():
-    try:
-        save_json_file(SESSIONS_FILE, chat_sessions)
-        logger.info("Chat sessions persisted on exit.")
-    except Exception:
-        logger.exception("Failed to persist sessions on exit.")
+    save_json_file(SESSIONS_FILE, chat_sessions)
+    logger.info("Persisted chat sessions to %s", SESSIONS_FILE)
 
 atexit.register(persist_sessions_on_exit)
 
-# ====== Initialize OpenAI (OpenRouter) client ======
-client = None
-if API_KEY:
-    try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=API_KEY,
-        )
-        logger.info("✅ OpenAI/OpenRouter client initialized")
-    except Exception as e:
-        logger.exception("⚠️ Failed to initialize OpenAI client: %s", e)
-        client = None
-else:
-    logger.warning("⚠️ No API key found; AI API client not initialized. Using fallback responses.")
-
-# ====== Utilities ======
+# ---- Rate limiting decorator (simple IP-based in-memory) ----
 def rate_limit():
-    """Simple IP-based rate limiting decorator"""
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
@@ -125,44 +120,39 @@ def rate_limit():
                 entry["count"] += 1
                 if entry["count"] > RATE_LIMIT_MAX:
                     retry_after = int(RATE_LIMIT_WINDOW - (now - entry["window_start"]))
-                    logger.warning("Rate limit exceeded for IP %s", ip)
                     return jsonify({"error": "rate_limited", "retry_after": retry_after}), 429
             return f(*args, **kwargs)
         return wrapped
     return decorator
 
-def clean_user_input(text: str) -> str:
-    if not isinstance(text, str):
-        return ""
-    return text.strip()
-
+# ---- System prompt & fallback ----
 def get_system_prompt():
-    personal = portfolio_data.get("personal_info", {})
-    name = personal.get("name", "Bharath")
-    role = personal.get("role", "Aspiring AI Engineer")
-    location = personal.get("location", "Hyderabad, India")
-    email = personal.get("email", "")
-    linkedin = personal.get("linkedin", "")
-    github = personal.get("github", "")
+    p = portfolio_data.get("personal_info", {})
+    name = p.get("name", "Bharath")
+    role = p.get("role", "Aspiring AI Engineer")
+    location = p.get("location", "Hyderabad, India")
+    email = p.get("email", "")
+    linkedin = p.get("linkedin", "")
+    github = p.get("github", "")
     skills = portfolio_data.get("skills", [])
     projects = portfolio_data.get("projects", [])
     youtube = portfolio_data.get("youtube", {})
 
-    # Keep system prompt compact but informative
-    projects_text = "\n".join([f"- {p.get('name','Unknown')}: {p.get('description','')}" for p in projects])
+    proj_text = "\n".join([f"- {p.get('name','Unknown')}: {p.get('description','')}" for p in projects])
     skills_text = ", ".join(skills)
 
     prompt = (
-        f"You are an assistant for {name}. Keep responses friendly, conversational and concise (3-5 sentences). "
-        f"Portfolio: Name: {name}; Role: {role}; Location: {location}; Email: {email}; LinkedIn: {linkedin}; GitHub: {github}. "
-        f"Skills: {skills_text}. Projects:\n{projects_text}\n"
-        "Guidelines: provide helpful, real-world examples when appropriate, keep answers concise, do not use markdown or bullets in the reply, and show personality."
+        f"You are {name}'s AI assistant. Keep responses friendly and concise (3-5 sentences).\n\n"
+        f"Portfolio Information:\n"
+        f"- Name: {name}\n- Role: {role}\n- Location: {location}\n- Email: {email}\n- LinkedIn: {linkedin}\n- GitHub: {github}\n\n"
+        f"Skills: {skills_text}\n\n"
+        f"Projects:\n{proj_text}\n\n"
+        f"YouTube Channel: {youtube.get('channel_name','')} - {youtube.get('focus','')}\n\n"
+        "Guidelines: Be helpful and enthusiastic. Do not use markdown. Keep answers natural and conversational."
     )
     return prompt
 
-def get_enhanced_fallback(user_input: str) -> str:
-    # Keep original fallback logic but slightly compressed
-    user_lower = (user_input or "").lower()
+def get_enhanced_fallback(user_input):
     personal = portfolio_data.get("personal_info", {})
     name = personal.get("name", "Bharath")
     role = personal.get("role", "Aspiring AI Engineer")
@@ -170,66 +160,88 @@ def get_enhanced_fallback(user_input: str) -> str:
     skills = portfolio_data.get("skills", [])
     youtube = portfolio_data.get("youtube", {})
 
-    if any(k in user_lower for k in ['portfolio', 'skills', 'experience', 'projects', 'about', 'who']):
-        skills_str = ', '.join(skills[:5]) or "programming and AI"
-        return (f"I'm {name}, an {role} from {location}. I'm passionate about building practical projects and learning by doing. "
-                f"My skills include {skills_str}. Notable projects include a C-based billing system and this portfolio website. What would you like to know?")
-    if any(k in user_lower for k in ['learn', 'study', 'how', 'advice']):
-        return ("Great question! I learn best by building projects: starting with fundamentals (C for logic), then Python and Flask for web + AI. "
-                "Practice, reading docs, and small projects made the biggest difference. Which skill are you focusing on?")
-    if any(k in user_lower for k in ['contact', 'email', 'reach']):
+    text = (user_input or "").lower()
+    if any(k in text for k in ["portfolio", "skills", "projects", "about", "who"]):
+        skills_short = ", ".join(skills[:6]) if skills else "programming and AI"
+        return f"I'm {name}, an {role} based in {location}. I build practical projects and focus on learning-by-doing. My skills include {skills_short}. Ask me about a specific project or skill!"
+    if any(k in text for k in ["learn", "study", "how", "advice"]):
+        return "I learn best with projects — start with the basics, build small apps, and gradually increase complexity. Ask me for a step-by-step plan for any topic."
+    if any(k in text for k in ["contact", "email", "reach"]):
         email = personal.get("email", "")
         linkedin = personal.get("linkedin", "")
-        github = personal.get("github", "")
-        contact_parts = []
-        if email: contact_parts.append(email)
-        if linkedin: contact_parts.append(linkedin)
-        if github: contact_parts.append(github)
-        contact = " | ".join(contact_parts) if contact_parts else "No public contact configured."
-        return f"You can reach me here: {contact}"
-    if any(k in user_lower for k in ['youtube', 'channel', 'videos', 'content']):
-        channel = youtube.get("channel_name", "Bharath Ai")
-        focus = youtube.get("focus", "AI and Python tutorials")
-        return (f"I run '{channel}' focusing on {focus}. I make project-based tutorials to help learners become LLM engineers.")
-    # default friendly fallback
-    return (f"Hi — I'm {name}'s AI assistant. I can talk about programming, portfolios, projects and learning strategies. "
-            "Ask me anything about tech or projects and I'll help!")
+        return f"You can reach me at {email} or via LinkedIn: {linkedin}."
+    if any(k in text for k in ["youtube", "channel", "videos"]):
+        return f"I run a YouTube channel called '{youtube.get('channel_name','Bharath Ai')}' focused on {youtube.get('focus','AI & Python tutorials')}."
+    return f"Hi — I'm {name}'s AI assistant. I can help with projects, learning plans, or portfolio info. What would you like to know?"
 
-# ====== AI API call with retry ======
-def call_ai_api(messages):
-    if not client:
-        raise RuntimeError("API client not configured")
-    last_err = None
-    for attempt in range(1, MAX_API_RETRIES + 2):
-        try:
-            logger.debug("Calling AI API (attempt %d) with %d messages", attempt, len(messages))
-            completion = client.chat.completions.create(
-                extra_headers={
-                    "HTTP-Referer": SITE_URL,
-                    "X-Title": SITE_NAME,
-                },
-                model="deepseek/deepseek-chat-v3.1:free",
-                messages=messages,
-                max_tokens=450,
-                temperature=0.7,
-            )
-            # compat with returned structure
-            reply = completion.choices[0].message.content
-            logger.debug("AI API success - reply length %d", len(reply or ""))
-            return reply
-        except Exception as e:
-            last_err = e
-            logger.warning("AI API attempt %d failed: %s", attempt, e)
-            time.sleep(0.5 * attempt)  # gentle backoff
-    # If all retries fail
-    logger.exception("All AI API attempts failed: %s", last_err)
-    raise last_err
+# ---- OpenRouter API call (requests) ----
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ====== Routes ======
+def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_tokens=400, temperature=0.7, timeout=15):
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY not configured")
 
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        # optional but helpful for OpenRouter ranking/analytics
+        "HTTP-Referer": SITE_URL,
+        "X-Title": SITE_NAME
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature
+    }
+
+    resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=timeout)
+    if resp.status_code != 200:
+        # include body for debugging
+        text = resp.text
+        logger.warning("OpenRouter API error %s: %s", resp.status_code, text[:400])
+        raise RuntimeError(f"OpenRouter API error {resp.status_code}: {text[:200]}")
+
+    data = resp.json()
+
+    # Try several common shapes to extract reply safely
+    # Preferred: choices[0].message.content
+    try:
+        choices = data.get("choices")
+        if choices and isinstance(choices, list):
+            first = choices[0]
+            # new-style: first['message']['content']
+            msg = first.get("message", {}) or {}
+            if isinstance(msg, dict) and msg.get("content"):
+                return msg["content"]
+            # sometimes content in 'text' or 'output'
+            if first.get("text"):
+                return first["text"]
+            if first.get("output"):
+                if isinstance(first["output"], str):
+                    return first["output"]
+                # output might be dict/array - try to stringify shortest useful
+                return json.dumps(first["output"]) 
+    except Exception as e:
+        logger.debug("Error parsing choices: %s", e)
+
+    # fallback: try top-level 'output' or 'message'
+    if data.get("output"):
+        if isinstance(data["output"], str):
+            return data["output"]
+        return json.dumps(data["output"])
+    if data.get("message"):
+        if isinstance(data["message"], str):
+            return data["message"]
+        return json.dumps(data["message"])
+
+    # last resort
+    raise RuntimeError("Unexpected OpenRouter response shape")
+
+# ---- Routes ----
 @app.route("/googlefa59b4f8aa3dd794.html")
 def google_verify():
-    # serve verification file if present in static/
     return send_from_directory("static", "googlefa59b4f8aa3dd794.html")
 
 @app.route("/")
@@ -237,22 +249,14 @@ def index():
     try:
         return render_template("index.html")
     except Exception as e:
-        logger.exception("Template render failed: %s", e)
+        logger.exception("Template error: %s", e)
         personal = portfolio_data.get("personal_info", {})
         name = personal.get("name", "Bharath")
         role = personal.get("role", "Aspiring AI Engineer")
         skills = portfolio_data.get("skills", [])
         return f"""
-        <!doctype html>
-        <html>
-          <head><meta charset="utf-8"><title>{name} - AI Assistant</title></head>
-          <body style="font-family: Arial; background:#f6f6f6; padding:30px; text-align:center;">
-            <h1>🤖 {name}'s AI Assistant</h1>
-            <p style="color:#555">{role}</p>
-            <p>Top skills: {', '.join(skills[:5])}</p>
-            <p><a href="/health">Health</a> • <a href="/portfolio">Portfolio JSON</a></p>
-          </body>
-        </html>
+        <!doctype html><html><head><meta charset='utf-8'><title>{name} Chatbot</title></head><body style='font-family:Arial;padding:40px;text-align:center;'>
+        <h1>🤖 {name}'s AI Assistant</h1><p>{role}</p><p>Top skills: {', '.join(skills[:5])}</p><a href='/health'>Health</a></body></html>
         """
 
 @app.route("/health")
@@ -261,15 +265,14 @@ def health():
     name = personal.get("name", "Bharath")
     projects = portfolio_data.get("projects", [])
     skills = portfolio_data.get("skills", [])
-    uptime = (datetime.utcnow() - startup_time).total_seconds()
+    uptime = int((datetime.utcnow() - startup_time).total_seconds())
     return jsonify({
         "status": "healthy",
-        "api_configured": bool(client),
+        "api_configured": bool(OPENROUTER_API_KEY),
         "portfolio_name": name,
         "projects_count": len(projects),
         "skills_count": len(skills),
-        "client_type": "OpenAI SDK (via OpenRouter)" if client else None,
-        "uptime_seconds": int(uptime),
+        "uptime_seconds": uptime,
         "server_time_utc": datetime.utcnow().isoformat() + "Z"
     })
 
@@ -278,64 +281,65 @@ def portfolio():
     return jsonify(portfolio_data)
 
 @app.route("/sessions")
-def sessions_debug():
-    # lightweight debugging endpoint (do not expose in production without auth)
-    return jsonify({
-        "session_count": len(chat_sessions),
-        "sessions": {k: len(v) for k, v in chat_sessions.items()}
-    })
+def sessions():
+    # For debug only - remove or protect in production
+    return jsonify({"session_count": len(chat_sessions), "sessions": {k: len(v) for k, v in chat_sessions.items()}})
 
 @app.route("/ask", methods=["POST"])
 @rate_limit()
 def ask():
     """
-    Main chat endpoint (JSON).
-    Request: { "message": "<text>", "session_id": "<optional>" }
-    Response: { "reply": "<text>", "session_id": "<id>", "status": "success|fallback|error" }
+    POST /ask
+    JSON input: {"message": "<text>", "session_id": "<optional>"}
+    Response: {"reply": "<text>", "session_id":"<id>", "status": "success|fallback|error"}
     """
     try:
-        data = request.get_json(force=True, silent=True) or {}
-        user_input = clean_user_input(data.get("message", ""))
+        data = request.get_json(silent=True) or {}
+        user_input = (data.get("message") or "").strip()
+        session_id = data.get("session_id") or f"session_{int(time.time()*1000)}"
+
         if not user_input:
             return jsonify({"error": "message_required"}), 400
 
-        session_id = data.get("session_id") or f"session_{int(time.time()*1000)}"
-        # initialize session if new
+        # init session if missing
         session = chat_sessions.setdefault(session_id, [])
-        if len(session) > MAX_HISTORY_TURNS:
-            session = session[-MAX_HISTORY_TURNS:]
-            chat_sessions[session_id] = session
-
-        # append user turn
+        # append user turn (store only role+content)
         session.append({"role": "user", "content": user_input, "ts": datetime.utcnow().isoformat()})
-        logger.info("Received message for session %s: %s", session_id, (user_input[:200] + "...") if len(user_input)>200 else user_input)
+        # trim
+        if len(session) > MAX_HISTORY_TURNS * 2:
+            session = session[-(MAX_HISTORY_TURNS):]
+            chat_sessions[session_id] = session
 
         bot_reply = ""
         api_success = False
 
-        if client:
+        if OPENROUTER_API_KEY:
             try:
-                # build messages: system + last few turns
-                messages = [{"role": "system", "content": get_system_prompt()}] + [
-                    {"role": m.get("role"), "content": m.get("content")} for m in session[-MAX_HISTORY_TURNS:]
-                ]
-                bot_reply = call_ai_api(messages)
+                # build messages for model: system + recent turns (role/content)
+                system_msg = {"role": "system", "content": get_system_prompt()}
+                # include last MAX_HISTORY_TURNS turns (converted)
+                recent = [{"role": m.get("role"), "content": m.get("content")} for m in session[-MAX_HISTORY_TURNS:]]
+                messages = [system_msg] + recent
+                logger.info("Calling OpenRouter with %d messages (session=%s)", len(messages), session_id)
+                bot_reply = call_openrouter_api(messages)
                 api_success = True
+                logger.info("OpenRouter replied (len=%d chars)", len(bot_reply or ""))
             except Exception as e:
-                logger.warning("API failed, falling back: %s", e)
+                logger.exception("OpenRouter API failed: %s", e)
                 bot_reply = get_enhanced_fallback(user_input)
                 api_success = False
         else:
-            logger.info("No API client - using fallback")
+            logger.info("No OPENROUTER_API_KEY - using fallback.")
             bot_reply = get_enhanced_fallback(user_input)
+            api_success = False
 
-        # append assistant message
+        # append assistant reply to session
         session.append({"role": "assistant", "content": bot_reply, "ts": datetime.utcnow().isoformat()})
-        # keep trimmed
+        # trim session
         if len(session) > MAX_HISTORY_TURNS:
             chat_sessions[session_id] = session[-MAX_HISTORY_TURNS:]
 
-        # optionally persist sessions every N messages (lightweight)
+        # persist occasionally (every 6 messages)
         if len(session) % 6 == 0:
             save_json_file(SESSIONS_FILE, chat_sessions)
 
@@ -346,16 +350,16 @@ def ask():
         })
     except Exception as e:
         logger.exception("Unhandled error in /ask: %s", e)
-        # return friendly assistant message on error (200 to avoid client-side crashes)
         personal = portfolio_data.get("personal_info", {})
         name = personal.get("name", "Bharath")
-        fallback = (f"Hi! I'm {name}'s AI assistant. Something went wrong handling your request, but I'm here to help — try asking again. "
-                    "If the problem persists, check the server logs.")
-        return jsonify({"reply": fallback, "status": "error"}), 200
+        return jsonify({
+            "reply": f"Hi! I'm {name}'s AI assistant. Something went wrong — please try again.",
+            "status": "error"
+        }), 200
 
-# ====== Run ======
+# ---- Main ----
 if __name__ == "__main__":
     personal = portfolio_data.get("personal_info", {})
-    logger.info("🚀 Starting %s's AI Assistant", personal.get("name", "Bharath"))
-    logger.info("🔑 API configured: %s", bool(client))
-    app.run(host="0.0.0.0", port=PORT, debug=(ENV == "development"))
+    logger.info("Starting %s's AI Assistant on port %s", personal.get("name", "Bharath"), PORT)
+    logger.info("OpenRouter API configured: %s", bool(OPENROUTER_API_KEY))
+    app.run(host="0.0.0.0", port=PORT, debug=os.getenv("FLASK_ENV") == "development")
