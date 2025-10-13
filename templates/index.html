@@ -6,22 +6,310 @@
     <title>Bharath AI</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Quick Reply Suggestions */
+        .quick-replies {
+            display: flex;
+            gap: 10px;
+            padding: 15px 30px 0;
+            flex-wrap: wrap;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .quick-reply-btn {
+            padding: 10px 18px;
+            background: white;
+            border: 2px solid #4facfe;
+            border-radius: 20px;
+            color: #4facfe;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(79, 172, 254, 0.2);
+        }
+
+        .quick-reply-btn:hover {
+            background: #4facfe;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
+        }
+
+        .quick-reply-btn i {
+            margin-right: 6px;
+        }
+
+        /* Theme Controls */
+        .theme-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+
+        .theme-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .theme-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: white;
+        }
+
+        /* Voice Button */
+        .voice-btn {
+            padding: 15px;
+            background: linear-gradient(135deg, #a8edea, #fed6e3);
+            color: #333;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(168, 237, 234, 0.3);
+            min-width: 50px;
+        }
+
+        .voice-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(168, 237, 234, 0.4);
+        }
+
+        .voice-btn.listening {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .voice-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Download Resume Button */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            padding: 0 30px 15px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Dark Mode Styles */
+        body.dark-mode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        body.dark-mode .chat-container {
+            background: rgba(30, 41, 59, 0.95);
+        }
+
+        body.dark-mode .chat-messages {
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+        }
+
+        body.dark-mode .message.bot .message-content {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-color: #374151;
+        }
+
+        body.dark-mode .welcome-message {
+            background: #1e293b;
+            color: #94a3b8;
+            border-color: #374151;
+        }
+
+        body.dark-mode #messageInput {
+            background: #1e293b;
+            border-color: #374151;
+            color: #e2e8f0;
+        }
+
+        body.dark-mode #messageInput:focus {
+            background: #0f172a;
+            border-color: #4facfe;
+        }
+
+        body.dark-mode .chat-input {
+            background: #1e293b;
+            border-top-color: #374151;
+        }
+
+        body.dark-mode .quick-reply-btn {
+            background: #1e293b;
+            border-color: #4facfe;
+            color: #4facfe;
+        }
+
+        body.dark-mode .quick-reply-btn:hover {
+            background: #4facfe;
+            color: white;
+        }
+
+        /* Theme Classes */
+        body.theme-green {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        body.theme-green .chat-header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        body.theme-orange {
+            background: linear-gradient(135deg, #f46b45 0%, #eea849 100%);
+        }
+
+        body.theme-orange .chat-header {
+            background: linear-gradient(135deg, #f46b45 0%, #eea849 100%);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .quick-replies {
+                padding: 10px 20px 0;
+            }
+
+            .quick-reply-btn {
+                padding: 8px 14px;
+                font-size: 0.85rem;
+            }
+
+            .theme-controls {
+                top: 10px;
+                right: 10px;
+                gap: 8px;
+            }
+
+            .theme-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 1rem;
+            }
+
+            .action-buttons {
+                padding: 0 20px 10px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
+            <div class="theme-controls">
+                <button class="theme-btn" id="darkModeBtn" title="Toggle Dark Mode">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button class="theme-btn" id="themeBtn" title="Change Theme">
+                    <i class="fas fa-palette"></i>
+                </button>
+            </div>
             <h1><i class="fas fa-robot"></i> Bharath's AI</h1>
             <p>Ask me anything about my skills, experience, and projects!</p>
+        </div>
+        
+        <!-- Quick Action Buttons -->
+        <div class="action-buttons">
+            <a href="https://bharath-portfolio-lvea.onrender.com/static/Janagam%20Bharath%20-%20Resume-1.pdf" 
+               target="_blank" 
+               class="action-btn">
+                <i class="fas fa-download"></i> Download Resume
+            </a>
+            <a href="https://github.com/janagambharath" 
+               target="_blank" 
+               class="action-btn">
+                <i class="fab fa-github"></i> GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/janagam-bharath-9ab1b235b/" 
+               target="_blank" 
+               class="action-btn">
+                <i class="fab fa-linkedin"></i> LinkedIn
+            </a>
+        </div>
+
+        <!-- Quick Reply Suggestions -->
+        <div class="quick-replies" id="quickReplies">
+            <button class="quick-reply-btn" onclick="sendQuickReply('Tell me about your skills')">
+                <i class="fas fa-code"></i> Skills
+            </button>
+            <button class="quick-reply-btn" onclick="sendQuickReply('What projects have you built?')">
+                <i class="fas fa-project-diagram"></i> Projects
+            </button>
+            <button class="quick-reply-btn" onclick="sendQuickReply('Tell me about your education')">
+                <i class="fas fa-graduation-cap"></i> Education
+            </button>
+            <button class="quick-reply-btn" onclick="sendQuickReply('What are your goals?')">
+                <i class="fas fa-bullseye"></i> Goals
+            </button>
+            <button class="quick-reply-btn" onclick="sendQuickReply('How can I contact you?')">
+                <i class="fas fa-envelope"></i> Contact
+            </button>
         </div>
         
         <div class="chat-messages" id="chatMessages">
             <div class="welcome-message">
                 <i class="fas fa-comments"></i>
-                <p>Welcome! I'm your Bharath AI assistant. I can help you learn about my background, skills, projects, and experience. Feel free to ask me anything!</p>
+                <p>Welcome! I'm your Bharath AI assistant. I can help you learn about my background, skills, projects, and experience. Try the quick buttons above or ask me anything!</p>
             </div>
         </div>
         
         <div class="chat-input">
+            <button class="voice-btn" id="voiceBtn" title="Voice Input">
+                <i class="fas fa-microphone"></i>
+            </button>
             <div class="input-container">
                 <input type="text" id="messageInput" placeholder="Ask me about my portfolio, skills, projects..." />
             </div>
@@ -33,7 +321,91 @@
 
     <script>
         let isTyping = false;
+        let recognition = null;
+        let currentTheme = localStorage.getItem('theme') || 'purple';
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
 
+        // Initialize theme on load
+        document.body.classList.add(`theme-${currentTheme}`);
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+            document.getElementById('darkModeBtn').innerHTML = '<i class="fas fa-sun"></i>';
+        }
+
+        // Dark Mode Toggle
+        document.getElementById('darkModeBtn').addEventListener('click', function() {
+            isDarkMode = !isDarkMode;
+            document.body.classList.toggle('dark-mode');
+            this.innerHTML = isDarkMode ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            localStorage.setItem('darkMode', isDarkMode);
+        });
+
+        // Theme Switcher
+        document.getElementById('themeBtn').addEventListener('click', function() {
+            const themes = ['purple', 'blue', 'green', 'orange'];
+            const currentIndex = themes.indexOf(currentTheme);
+            currentTheme = themes[(currentIndex + 1) % themes.length];
+            
+            // Remove all theme classes
+            themes.forEach(theme => document.body.classList.remove(`theme-${theme}`));
+            
+            // Add new theme
+            document.body.classList.add(`theme-${currentTheme}`);
+            localStorage.setItem('theme', currentTheme);
+            
+            // Visual feedback
+            this.style.transform = 'rotate(360deg)';
+            setTimeout(() => this.style.transform = 'rotate(0deg)', 500);
+        });
+
+        // Voice Input Setup
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                document.getElementById('voiceBtn').classList.add('listening');
+                document.getElementById('voiceBtn').innerHTML = '<i class="fas fa-stop"></i>';
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('messageInput').value = transcript;
+                sendMessage();
+            };
+
+            recognition.onend = function() {
+                document.getElementById('voiceBtn').classList.remove('listening');
+                document.getElementById('voiceBtn').innerHTML = '<i class="fas fa-microphone"></i>';
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                document.getElementById('voiceBtn').classList.remove('listening');
+                document.getElementById('voiceBtn').innerHTML = '<i class="fas fa-microphone"></i>';
+            };
+
+            document.getElementById('voiceBtn').addEventListener('click', function() {
+                if (this.classList.contains('listening')) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            });
+        } else {
+            document.getElementById('voiceBtn').style.display = 'none';
+        }
+
+        // Quick Reply Handler
+        function sendQuickReply(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+
+        // Enter key handler
         document.getElementById('messageInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && !isTyping) {
                 sendMessage();
@@ -46,6 +418,12 @@
             const sendButton = document.getElementById('sendButton');
             
             if (message === '' || isTyping) return;
+
+            // Hide quick replies after first message
+            const quickReplies = document.getElementById('quickReplies');
+            if (quickReplies) {
+                quickReplies.style.display = 'none';
+            }
 
             // Clear welcome message
             const welcomeMsg = document.querySelector('.welcome-message');
@@ -163,7 +541,7 @@
                 // Scroll to bottom
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 
-                // Faster animation speed (60ms instead of 150ms)
+                // Animation speed
                 await new Promise(resolve => setTimeout(resolve, 60));
             }
         }
