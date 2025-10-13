@@ -1,9 +1,9 @@
 import os
 import json
+import requests
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from flask import send_from_directory
-from openai import OpenAI
 
 # Load environment variables
 try:
@@ -21,17 +21,6 @@ API_KEY = os.getenv("OPENROUTER_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
 SITE_URL = os.getenv("SITE_URL", "https://bharath-portfolio-lvea.onrender.com/")
 SITE_NAME = os.getenv("SITE_NAME", "Bharath's AI Portfolio")
-
-# Initialize OpenAI client with OpenRouter
-client = None
-if API_KEY:
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=API_KEY,
-    )
-    print("✅ OpenAI client initialized")
-else:
-    print("⚠️ No API key - client not initialized")
 
 # Google verification route
 @app.route('/googlefa59b4f8aa3dd794.html')
@@ -69,31 +58,41 @@ portfolio_data = load_portfolio_data()
 chat_sessions = {}
 
 def call_ai_api(messages):
-    """Call OpenRouter API using OpenAI client"""
-    if not client:
-        raise Exception("OpenAI client not initialized - check API key")
+    """Call OpenRouter API using requests library as shown in documentation"""
+    if not API_KEY:
+        raise Exception("No API key configured")
     
     try:
         print(f"🔄 Calling API with {len(messages)} messages...")
         
-        completion = client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": SITE_URL,
-                "X-Title": SITE_NAME,
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": SITE_URL,  # Optional. Site URL for rankings on openrouter.ai
+                "X-Title": SITE_NAME,  # Optional. Site title for rankings on openrouter.ai
             },
-            model="deepseek/deepseek-chat-v3.1:free",
-            messages=messages,
-            max_tokens=350,
-            temperature=0.7,
+            data=json.dumps({
+                "model": "deepseek/deepseek-chat-v3.1:free",
+                "messages": messages,
+                "max_tokens": 350,
+                "temperature": 0.7
+            }),
+            timeout=30
         )
         
-        reply = completion.choices[0].message.content
-        print(f"✅ API Success: {reply[:50]}...")
-        return reply
-        
+        if response.status_code == 200:
+            reply = response.json()["choices"][0]["message"]["content"]
+            print(f"✅ API Success: {reply[:50]}...")
+            return reply
+        else:
+            print(f"❌ API Error: {response.status_code} - {response.text}")
+            raise Exception(f"API Error: {response.status_code}")
+            
     except Exception as e:
-        print(f"❌ OpenAI API Error: {str(e)}")
-        raise Exception(f"API Error: {str(e)}")
+        print(f"❌ API call failed: {str(e)}")
+        raise
 
 def get_system_prompt():
     """Enhanced system prompt with correct data access"""
@@ -235,7 +234,7 @@ def ask():
         bot_reply = ""
         api_success = False
         
-        if client:
+        if API_KEY:
             try:
                 messages = [
                     {"role": "system", "content": get_system_prompt()}
@@ -251,7 +250,7 @@ def ask():
                 bot_reply = get_enhanced_fallback(user_input)
                 print(f"🔄 Using fallback response")
         else:
-            print("⚠️ No API client - using fallback")
+            print("⚠️ No API key - using fallback")
             bot_reply = get_enhanced_fallback(user_input)
         
         # Add bot response
@@ -287,11 +286,11 @@ def health():
     
     return jsonify({
         "status": "healthy",
-        "api_configured": bool(client),
+        "api_configured": bool(API_KEY),
         "portfolio_name": name,
         "projects": len(projects),
         "skills": len(skills),
-        "client_type": "OpenAI SDK"
+        "model": "deepseek/deepseek-chat-v3.1:free"
     })
 
 @app.route("/portfolio")
@@ -306,5 +305,6 @@ if __name__ == "__main__":
     
     print(f"🚀 Starting {name}'s AI Assistant")
     print(f"📊 {len(projects)} projects loaded")
-    print(f"🔑 OpenAI Client configured: {bool(client)}")
+    print(f"🔑 API Key configured: {bool(API_KEY)}")
+    print(f"🤖 Model: deepseek/deepseek-chat-v3.1:free")
     app.run(host="0.0.0.0", port=PORT, debug=True)
