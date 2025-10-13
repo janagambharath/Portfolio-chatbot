@@ -1,9 +1,9 @@
 import os
 import json
-import requests
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from flask import send_from_directory
+from openai import OpenAI
 
 # Load environment variables
 try:
@@ -19,8 +19,21 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 # Configuration
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
+SITE_URL = os.getenv("SITE_URL", "https://bharath-portfolio-lvea.onrender.com/")
+SITE_NAME = os.getenv("SITE_NAME", "Bharath's AI Portfolio")
 
-# Google verification route - FIXED filename
+# Initialize OpenAI client with OpenRouter
+client = None
+if API_KEY:
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=API_KEY,
+    )
+    print("✅ OpenAI client initialized")
+else:
+    print("⚠️ No API key - client not initialized")
+
+# Google verification route
 @app.route('/googlefa59b4f8aa3dd794.html')
 def google_verify():
     return send_from_directory('static', 'googlefa59b4f8aa3dd794.html')
@@ -31,7 +44,6 @@ def load_portfolio_data():
     try:
         with open("portfolio.json", "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Extract name from nested structure
             name = data.get('personal_info', {}).get('name', 'Bharath')
             print(f"✅ Loaded portfolio for: {name}")
             return data
@@ -57,37 +69,34 @@ portfolio_data = load_portfolio_data()
 chat_sessions = {}
 
 def call_ai_api(messages):
-    """Direct API call with increased token limit"""
-    if not API_KEY:
-        raise Exception("No API key")
+    """Call OpenRouter API using OpenAI client"""
+    if not client:
+        raise Exception("OpenAI client not initialized - check API key")
     
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "deepseek/deepseek-chat-v3.1:free",
-        "messages": messages,
-        "max_tokens": 350,
-        "temperature": 0.7
-    }
-    
-    print(f"🔄 Calling API with {len(messages)} messages...")
-    response = requests.post(url, headers=headers, json=data, timeout=30)
-    
-    if response.status_code == 200:
-        reply = response.json()["choices"][0]["message"]["content"]
+    try:
+        print(f"🔄 Calling API with {len(messages)} messages...")
+        
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": SITE_URL,
+                "X-Title": SITE_NAME,
+            },
+            model="deepseek/deepseek-chat-v3.1:free",
+            messages=messages,
+            max_tokens=350,
+            temperature=0.7,
+        )
+        
+        reply = completion.choices[0].message.content
         print(f"✅ API Success: {reply[:50]}...")
         return reply
-    else:
-        print(f"❌ API Error: {response.status_code} - {response.text}")
-        raise Exception(f"API Error: {response.status_code}")
+        
+    except Exception as e:
+        print(f"❌ OpenAI API Error: {str(e)}")
+        raise Exception(f"API Error: {str(e)}")
 
 def get_system_prompt():
     """Enhanced system prompt with correct data access"""
-    # Extract data correctly from nested structure
     personal_info = portfolio_data.get('personal_info', {})
     name = personal_info.get('name', 'Bharath')
     role = personal_info.get('role', 'Aspiring AI Engineer')
@@ -100,6 +109,7 @@ def get_system_prompt():
     projects = portfolio_data.get('projects', [])
     education = portfolio_data.get('education', [])
     goals = portfolio_data.get('goals', [])
+    youtube = portfolio_data.get('youtube', {})
     
     return f"""You are {name}'s AI assistant. Keep responses conversational and informative (3-5 sentences, around 40-60 words).
 
@@ -121,6 +131,8 @@ Education:
 
 Goals: {', '.join(goals)}
 
+YouTube Channel: {youtube.get('channel_name', '')} - {youtube.get('focus', '')}
+
 Guidelines:
 - Be friendly, helpful, and engaging
 - Provide detailed but not overwhelming answers
@@ -135,13 +147,11 @@ def get_enhanced_fallback(user_input):
     """Enhanced fallback responses with correct data access"""
     user_lower = user_input.lower()
     
-    # Extract data correctly
     personal_info = portfolio_data.get('personal_info', {})
     name = personal_info.get('name', 'Bharath')
     role = personal_info.get('role', 'Aspiring AI Engineer')
     location = personal_info.get('location', 'Hyderabad, India')
     skills = portfolio_data.get('skills', [])
-    projects = portfolio_data.get('projects', [])
     
     if any(word in user_lower for word in ['portfolio', 'skills', 'experience', 'projects', 'about', 'who']):
         skills_str = ', '.join(skills[:5])
@@ -152,6 +162,12 @@ def get_enhanced_fallback(user_input):
     
     elif any(word in user_lower for word in ['code', 'programming', 'python', 'help', 'development']):
         return f"I'd be excited to help with programming! I work primarily with Python, C, Flask, and web technologies, plus I'm always exploring AI and chatbot development. Programming is like solving puzzles - each challenge teaches you new approaches and techniques. Whether it's debugging, algorithm design, or building user interfaces, I enjoy the problem-solving aspect. What specific coding challenge or concept are you working on? I'm here to share insights and help you work through it!"
+    
+    elif any(word in user_lower for word in ['youtube', 'channel', 'videos', 'content']):
+        youtube = portfolio_data.get('youtube', {})
+        channel_name = youtube.get('channel_name', 'Bharath Ai')
+        focus = youtube.get('focus', 'AI and Python tutorials')
+        return f"Yes! I run a YouTube channel called '{channel_name}' where I focus on {focus}. My goal is to help viewers become LLM Engineers through practical, project-based learning. I create tutorials on building AI tools, chatbots, and real projects to make learning accessible for beginners. It's all about learning by doing! Are you interested in AI development or looking for specific tutorials?"
     
     elif any(word in user_lower for word in ['project', 'build', 'create']):
         return f"Projects are the best way to learn and showcase your skills! My billing system in C was a great exercise in understanding data structures and user interaction, while this portfolio website taught me web development and API integration. I always try to build something that solves a real problem or demonstrates a concept I'm learning. The key is starting with a clear goal and breaking it down into manageable steps. What kind of project are you thinking about building?"
@@ -219,7 +235,7 @@ def ask():
         bot_reply = ""
         api_success = False
         
-        if API_KEY:
+        if client:
             try:
                 messages = [
                     {"role": "system", "content": get_system_prompt()}
@@ -235,7 +251,7 @@ def ask():
                 bot_reply = get_enhanced_fallback(user_input)
                 print(f"🔄 Using fallback response")
         else:
-            print("⚠️ No API key - using fallback")
+            print("⚠️ No API client - using fallback")
             bot_reply = get_enhanced_fallback(user_input)
         
         # Add bot response
@@ -271,10 +287,11 @@ def health():
     
     return jsonify({
         "status": "healthy",
-        "api_configured": bool(API_KEY),
+        "api_configured": bool(client),
         "portfolio_name": name,
         "projects": len(projects),
-        "skills": len(skills)
+        "skills": len(skills),
+        "client_type": "OpenAI SDK"
     })
 
 @app.route("/portfolio")
@@ -289,5 +306,5 @@ if __name__ == "__main__":
     
     print(f"🚀 Starting {name}'s AI Assistant")
     print(f"📊 {len(projects)} projects loaded")
-    print(f"🔑 API Key configured: {bool(API_KEY)}")
+    print(f"🔑 OpenAI Client configured: {bool(client)}")
     app.run(host="0.0.0.0", port=PORT, debug=True)
