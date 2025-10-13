@@ -10,40 +10,43 @@
     "website": "https://bharath-portfolio-lvea.onrender.com/"
   },
   "skills": [
-    "C Programming",
     "Python",
     "Flask",
     "HTML",
     "CSS",
-    "AI & Chatbots",
-    "DSA"
+    "AI & Chatbots"
   ],
   "education": [
     {
       "degree": "Diploma in ECE",
-      "institution": "Annamacharya Institute of technology Hyderabad",
+      "institution": "Annamacharya Institute of Technology, Hyderabad",
       "year": "Completed 2025"
     },
     {
       "degree": "B.Tech CSE (via ECET)",
-      "institution": "Unknown For Now",
+      "institution": "To be decided",
       "year": "Starting 2025"
     }
   ],
   "projects": [
     {
-      "name": "Function-based Billing System",
-      "description": "A C-based billing system using functions."
+      "name": "Portfolio Website",
+      "description": "A Flask-based personal portfolio website integrated with an AI chatbot."
     },
     {
-      "name": "Portfolio Website",
-      "description": "Flask-based personal portfolio website with interactive chatbot."
+      "name": "Bharath AI Chatbot",
+      "description": "An AI-powered personal assistant built with Python and Flask using Deepseek API, designed to answer portfolio-related queries and act as an interactive showcase of AI integration."
     }
   ],
   "goals": [
     "Become a skilled AI Engineer",
-    "Create interactive portfolio with chatbot",
-    "Build projects to showcase skills",
+    "Create an advanced interactive portfolio with AI features",
+    "Build impactful AI projects to showcase skills",
     "Earn well and make parents proud"
-  ]
+  ],
+  "youtube": {
+    "channel_name": "Bharath Ai",
+    "focus": "AI, Python, and LLM Engineer journey — teaching beginners to build AI tools and chatbots through real projects and tutorials.",
+    "goal": "Help viewers become LLM Engineers in 180 days using simple, project-based learning."
+  }
 }
