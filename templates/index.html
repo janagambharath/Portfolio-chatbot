@@ -118,7 +118,7 @@
             cursor: not-allowed;
         }
 
-        /* Download Resume Button */
+        /* Action Buttons */
         .action-buttons {
             display: flex;
             gap: 10px;
@@ -146,6 +146,15 @@
         .action-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .action-btn.youtube {
+            background: linear-gradient(135deg, #FF0000, #CC0000);
+            box-shadow: 0 4px 12px rgba(255, 0, 0, 0.3);
+        }
+
+        .action-btn.youtube:hover {
+            box-shadow: 0 6px 20px rgba(255, 0, 0, 0.4);
         }
 
         /* Dark Mode Styles */
@@ -243,6 +252,11 @@
             .action-buttons {
                 padding: 0 20px 10px;
             }
+
+            .action-btn {
+                padding: 8px 16px;
+                font-size: 0.85rem;
+            }
         }
     </style>
 </head>
@@ -278,6 +292,11 @@
                class="action-btn">
                 <i class="fab fa-linkedin"></i> LinkedIn
             </a>
+            <a href="https://www.youtube.com/@Bharath-ai" 
+               target="_blank" 
+               class="action-btn youtube">
+                <i class="fab fa-youtube"></i> YouTube
+            </a>
         </div>
 
         <!-- Quick Reply Suggestions -->
@@ -294,8 +313,8 @@
             <button class="quick-reply-btn" onclick="sendQuickReply('What are your goals?')">
                 <i class="fas fa-bullseye"></i> Goals
             </button>
-            <button class="quick-reply-btn" onclick="sendQuickReply('How can I contact you?')">
-                <i class="fas fa-envelope"></i> Contact
+            <button class="quick-reply-btn" onclick="sendQuickReply('Tell me about your YouTube channel')">
+                <i class="fab fa-youtube"></i> YouTube
             </button>
         </div>
         
@@ -346,14 +365,10 @@
             const currentIndex = themes.indexOf(currentTheme);
             currentTheme = themes[(currentIndex + 1) % themes.length];
             
-            // Remove all theme classes
             themes.forEach(theme => document.body.classList.remove(`theme-${theme}`));
-            
-            // Add new theme
             document.body.classList.add(`theme-${currentTheme}`);
             localStorage.setItem('theme', currentTheme);
             
-            // Visual feedback
             this.style.transform = 'rotate(360deg)';
             setTimeout(() => this.style.transform = 'rotate(0deg)', 500);
         });
@@ -445,6 +460,8 @@
             const typingMessage = addMessage('', 'bot', true);
             
             try {
+                console.log('Sending message to /ask endpoint:', message);
+                
                 const response = await fetch('/ask', {
                     method: 'POST',
                     headers: {
@@ -453,18 +470,24 @@
                     body: JSON.stringify({ message: message }),
                 });
 
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Response data:', data);
                 
                 // Remove typing indicator
                 typingMessage.remove();
                 
-                // Add bot response with word-by-word animation
-                await addStreamingMessage(data.reply, 'bot');
+                if (data.reply) {
+                    // Add bot response with word-by-word animation
+                    await addStreamingMessage(data.reply, 'bot');
+                } else {
+                    addMessage('Sorry, I received an empty response. Please try again.', 'bot');
+                }
                 
             } catch (error) {
+                console.error('Fetch error:', error);
                 typingMessage.remove();
-                addMessage('Sorry, I encountered an error. Please try again.', 'bot');
-                console.error('Error:', error);
+                addMessage('Sorry, I encountered an error connecting to the server. Please check if the server is running and try again.', 'bot');
             } finally {
                 // Re-enable input and button
                 input.disabled = false;
@@ -538,10 +561,7 @@
                 wordSpan.textContent = words[i] + (i < words.length - 1 ? ' ' : '');
                 content.appendChild(wordSpan);
                 
-                // Scroll to bottom
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                
-                // Animation speed
                 await new Promise(resolve => setTimeout(resolve, 60));
             }
         }
