@@ -1,5 +1,3 @@
-
-
 import os
 import json
 import time
@@ -23,10 +21,7 @@ RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "30"))
 
 # ---- Logging ----
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("bharath_ai_app")
 
 # ---- App init ----
@@ -79,7 +74,7 @@ default_portfolio = {
 
 portfolio_data = load_json_file(PORTFOLIO_FILE, default_portfolio)
 
-# Try restore sessions on startup
+# Restore sessions on startup
 _restored = load_json_file(SESSIONS_FILE, {})
 if isinstance(_restored, dict):
     chat_sessions.update(_restored)
@@ -92,7 +87,7 @@ def persist_sessions_on_exit():
 
 atexit.register(persist_sessions_on_exit)
 
-# ---- Rate limiting decorator (simple IP-based in-memory) ----
+# ---- Rate limiting decorator ----
 def rate_limit():
     def decorator(f):
         @wraps(f)
@@ -163,14 +158,13 @@ def get_enhanced_fallback(user_input):
 # ---- OpenRouter API call (requests) ----
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_tokens=400, temperature=0.7, timeout=15):
+def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_tokens=800, temperature=0.7, timeout=20):
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY not configured")
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        # optional but helpful for OpenRouter ranking/analytics
         "HTTP-Referer": SITE_URL,
         "X-Title": SITE_NAME
     }
@@ -184,35 +178,27 @@ def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_
 
     resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=timeout)
     if resp.status_code != 200:
-        # include body for debugging
         text = resp.text
         logger.warning("OpenRouter API error %s: %s", resp.status_code, text[:400])
         raise RuntimeError(f"OpenRouter API error {resp.status_code}: {text[:200]}")
 
     data = resp.json()
-
-    # Try several common shapes to extract reply safely
-    # Preferred: choices[0].message.content
     try:
         choices = data.get("choices")
         if choices and isinstance(choices, list):
             first = choices[0]
-            # new-style: first['message']['content']
             msg = first.get("message", {}) or {}
             if isinstance(msg, dict) and msg.get("content"):
                 return msg["content"]
-            # sometimes content in 'text' or 'output'
             if first.get("text"):
                 return first["text"]
             if first.get("output"):
                 if isinstance(first["output"], str):
                     return first["output"]
-                # output might be dict/array - try to stringify shortest useful
-                return json.dumps(first["output"]) 
+                return json.dumps(first["output"])
     except Exception as e:
         logger.debug("Error parsing choices: %s", e)
 
-    # fallback: try top-level 'output' or 'message'
     if data.get("output"):
         if isinstance(data["output"], str):
             return data["output"]
@@ -222,7 +208,6 @@ def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_
             return data["message"]
         return json.dumps(data["message"])
 
-    # last resort
     raise RuntimeError("Unexpected OpenRouter response shape")
 
 # ---- Routes ----
@@ -268,17 +253,11 @@ def portfolio():
 
 @app.route("/sessions")
 def sessions():
-    # For debug only - remove or protect in production
     return jsonify({"session_count": len(chat_sessions), "sessions": {k: len(v) for k, v in chat_sessions.items()}})
 
 @app.route("/ask", methods=["POST"])
 @rate_limit()
 def ask():
-    """
-    POST /ask
-    JSON input: {"message": "<text>", "session_id": "<optional>"}
-    Response: {"reply": "<text>", "session_id":"<id>", "status": "success|fallback|error"}
-    """
     try:
         data = request.get_json(silent=True) or {}
         user_input = (data.get("message") or "").strip()
@@ -287,11 +266,8 @@ def ask():
         if not user_input:
             return jsonify({"error": "message_required"}), 400
 
-        # init session if missing
         session = chat_sessions.setdefault(session_id, [])
-        # append user turn (store only role+content)
         session.append({"role": "user", "content": user_input, "ts": datetime.utcnow().isoformat()})
-        # trim
         if len(session) > MAX_HISTORY_TURNS * 2:
             session = session[-(MAX_HISTORY_TURNS):]
             chat_sessions[session_id] = session
@@ -301,9 +277,7 @@ def ask():
 
         if OPENROUTER_API_KEY:
             try:
-                # build messages for model: system + recent turns (role/content)
                 system_msg = {"role": "system", "content": get_system_prompt()}
-                # include last MAX_HISTORY_TURNS turns (converted)
                 recent = [{"role": m.get("role"), "content": m.get("content")} for m in session[-MAX_HISTORY_TURNS:]]
                 messages = [system_msg] + recent
                 logger.info("Calling OpenRouter with %d messages (session=%s)", len(messages), session_id)
@@ -319,13 +293,10 @@ def ask():
             bot_reply = get_enhanced_fallback(user_input)
             api_success = False
 
-        # append assistant reply to session
         session.append({"role": "assistant", "content": bot_reply, "ts": datetime.utcnow().isoformat()})
-        # trim session
         if len(session) > MAX_HISTORY_TURNS:
             chat_sessions[session_id] = session[-MAX_HISTORY_TURNS:]
 
-        # persist occasionally (every 6 messages)
         if len(session) % 6 == 0:
             save_json_file(SESSIONS_FILE, chat_sessions)
 
