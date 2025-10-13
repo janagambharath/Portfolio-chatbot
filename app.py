@@ -1,18 +1,4 @@
-# app.py
-"""
-Flask chatbot server using OpenRouter (deepseek/deepseek-chat-v3.1:free).
 
-Environment variables:
-- OPENROUTER_API_KEY  (required to use the API; app runs with fallback if missing)
-- PORT                (optional, default 10000)
-- SITE_URL            (optional, used as HTTP-Referer header)
-- SITE_NAME           (optional, used as X-Title header)
-- PORTFOLIO_FILE      (optional, default portfolio.json)
-- SESSIONS_FILE       (optional, default chat_sessions.json)
-
-Run:
-    python app.py
-"""
 
 import os
 import json
