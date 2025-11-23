@@ -57,19 +57,16 @@ def save_json_file(path, data):
 # ---- Load portfolio ----
 default_portfolio = {
     "personal_info": {
-        "name": "Bharath",
-        "role": "Aspiring AI Engineer",
+        "name": "Janagam Bharath",
+        "role": "AI / LLM Engineer",
         "location": "Hyderabad, India",
         "email": "janagambharath1107@gmail.com",
         "linkedin": "https://www.linkedin.com/in/janagam-bharath-9ab1b235b/",
         "github": "https://github.com/janagambharath"
     },
-    "skills": ["Python", "C", "Flask", "HTML", "CSS", "AI & Chatbots", "DSA"],
-    "projects": [
-        {"name": "Billing System", "description": "Function-based billing system"},
-        {"name": "Portfolio Website", "description": "Personal website with chatbot"}
-    ],
-    "youtube": {"channel_name": "Bharath Ai", "focus": "AI and Python tutorials"}
+    "skills": {"all_skills": ["Python", "Flask", "AI", "NLP", "RAG", "Vector Databases"]},
+    "projects": [],
+    "youtube": {"channel_name": "Bharath AI", "focus": "AI and LLM tutorials"}
 }
 
 portfolio_data = load_json_file(PORTFOLIO_FILE, default_portfolio)
@@ -109,51 +106,168 @@ def rate_limit():
 # ---- System prompt & fallback ----
 def get_system_prompt():
     p = portfolio_data.get("personal_info", {})
-    name = p.get("name", "Bharath")
-    role = p.get("role", "Aspiring AI Engineer")
+    name = p.get("name", "Janagam Bharath")
+    role = p.get("role", "AI / LLM Engineer")
     location = p.get("location", "Hyderabad, India")
-    email = p.get("email", "")
+    email = p.get("email", "janagambharath1107@gmail.com")
     linkedin = p.get("linkedin", "")
     github = p.get("github", "")
-    skills = portfolio_data.get("skills", [])
+    summary = p.get("summary", "")
+    
+    # Get skills - handle both old and new format
+    skills_data = portfolio_data.get("skills", {})
+    if isinstance(skills_data, dict):
+        all_skills = skills_data.get("all_skills", [])
+        languages = skills_data.get("languages", [])
+        ai_frameworks = skills_data.get("ai_ml_frameworks", [])
+        nlp = skills_data.get("nlp_concepts", [])
+    else:
+        all_skills = skills_data if isinstance(skills_data, list) else []
+        languages = []
+        ai_frameworks = []
+        nlp = []
+    
+    # Get projects
     projects = portfolio_data.get("projects", [])
+    proj_text = ""
+    for proj in projects:
+        name_p = proj.get("name", "Unknown Project")
+        desc = proj.get("description", "")
+        tech = proj.get("technologies", [])
+        demo = proj.get("live_demo", "")
+        proj_text += f"\n- {name_p}: {desc}"
+        if tech:
+            proj_text += f" | Tech: {', '.join(tech[:3])}"
+        if demo:
+            proj_text += f" | Demo: {demo}"
+    
+    # Get achievements
+    achievements = portfolio_data.get("achievements", [])
+    achievements_text = "\n".join([f"- {a}" for a in achievements[:4]]) if achievements else ""
+    
+    # Get YouTube info
     youtube = portfolio_data.get("youtube", {})
-
-    proj_text = "\n".join([f"- {p.get('name','Unknown')}: {p.get('description','')}" for p in projects])
-    skills_text = ", ".join(skills)
-
+    yt_name = youtube.get("channel_name", "Bharath AI")
+    yt_focus = youtube.get("focus", "AI and LLM tutorials")
+    
+    # Get education
+    education = portfolio_data.get("education", [])
+    edu_text = ""
+    if education and len(education) > 0:
+        edu_text = f"\n- Current: {education[0].get('degree', '')} at {education[0].get('institution', 'Hyderabad')}"
+    
+    skills_summary = ", ".join(all_skills[:10]) if all_skills else "Python, Flask, AI, NLP, RAG"
+    
     prompt = (
-        f"You are {name}'s AI assistant. Keep responses friendly and concise (3-5 sentences).\n\n"
-        f"Portfolio Information:\n"
-        f"- Name: {name}\n- Role: {role}\n- Location: {location}\n- Email: {email}\n- LinkedIn: {linkedin}\n- GitHub: {github}\n\n"
-        f"Skills: {skills_text}\n\n"
-        f"Projects:\n{proj_text}\n\n"
-        f"YouTube Channel: {youtube.get('channel_name','')} - {youtube.get('focus','')}\n\n"
-        "Guidelines: Be helpful and enthusiastic. Do not use markdown. Keep answers natural and conversational."
+        f"You are {name}'s AI assistant. Keep responses friendly, concise (3-5 sentences), and enthusiastic.\n\n"
+        f"=== PORTFOLIO INFORMATION ===\n"
+        f"Name: {name}\n"
+        f"Role: {role}\n"
+        f"Location: {location}\n"
+        f"Email: {email}\n"
+        f"LinkedIn: {linkedin}\n"
+        f"GitHub: {github}\n"
+        f"\nSummary: {summary}\n"
+        f"\n=== SKILLS ===\n"
+        f"Core Skills: {skills_summary}\n"
     )
+    
+    if languages:
+        prompt += f"Languages: {', '.join(languages)}\n"
+    if ai_frameworks:
+        prompt += f"AI/ML: {', '.join(ai_frameworks)}\n"
+    if nlp:
+        prompt += f"NLP Expertise: {', '.join(nlp)}\n"
+    
+    prompt += f"\n=== PROJECTS ==={proj_text}\n"
+    
+    if achievements_text:
+        prompt += f"\n=== KEY ACHIEVEMENTS ===\n{achievements_text}\n"
+    
+    if edu_text:
+        prompt += f"\n=== EDUCATION ==={edu_text}\n"
+    
+    prompt += (
+        f"\n=== YOUTUBE CHANNEL ===\n"
+        f"Channel: {yt_name}\n"
+        f"Focus: {yt_focus}\n"
+        f"\n=== GUIDELINES ===\n"
+        f"- Be helpful, enthusiastic, and conversational\n"
+        f"- Keep answers natural and engaging (no markdown formatting)\n"
+        f"- When asked about projects, mention the live demo links\n"
+        f"- Highlight Bharath's expertise in AI/LLM, NLP, RAG systems, and practical deployment\n"
+        f"- Emphasize his achievement of deploying 3 live AI apps before turning 18\n"
+        f"- If asked technical questions, demonstrate knowledge of NLP, embeddings, vector databases, and Flask\n"
+    )
+    
     return prompt
 
 def get_enhanced_fallback(user_input):
     personal = portfolio_data.get("personal_info", {})
-    name = personal.get("name", "Bharath")
-    role = personal.get("role", "Aspiring AI Engineer")
+    name = personal.get("name", "Janagam Bharath")
+    role = personal.get("role", "AI / LLM Engineer")
     location = personal.get("location", "Hyderabad, India")
-    skills = portfolio_data.get("skills", [])
+    
+    skills_data = portfolio_data.get("skills", {})
+    if isinstance(skills_data, dict):
+        skills = skills_data.get("all_skills", [])
+    else:
+        skills = skills_data if isinstance(skills_data, list) else []
+    
+    projects = portfolio_data.get("projects", [])
     youtube = portfolio_data.get("youtube", {})
+    achievements = portfolio_data.get("achievements", [])
 
     text = (user_input or "").lower()
-    if any(k in text for k in ["portfolio", "skills", "projects", "about", "who"]):
-        skills_short = ", ".join(skills[:6]) if skills else "programming and AI"
-        return f"I'm {name}, an {role} based in {location}. I build practical projects and focus on learning-by-doing. My skills include {skills_short}. Ask me about a specific project or skill!"
-    if any(k in text for k in ["learn", "study", "how", "advice"]):
-        return "I learn best with projects — start with the basics, build small apps, and gradually increase complexity. Ask me for a step-by-step plan for any topic."
-    if any(k in text for k in ["contact", "email", "reach"]):
+    
+    # Portfolio/About queries
+    if any(k in text for k in ["portfolio", "about", "who are you", "who is", "introduce"]):
+        skills_short = ", ".join(skills[:6]) if skills else "AI/ML, NLP, Flask, RAG"
+        return f"Hi! I'm {name}, an {role} based in {location}. I specialize in building real-world AI applications using NLP, RAG systems, and Flask. My core skills include {skills_short}. I've deployed 3 live AI apps before turning 18! Ask me about any specific project or skill."
+    
+    # Skills queries
+    if any(k in text for k in ["skill", "technology", "tech stack", "what do you know"]):
+        if skills:
+            primary = ", ".join(skills[:8])
+            return f"I'm proficient in {primary}. I specialize in AI/LLM development, NLP, RAG systems, vector databases, and deploying AI apps on Hugging Face Spaces and Render. Want to know more about any specific technology?"
+        return "I work with Python, Flask, Hugging Face, NLP, RAG, Vector Databases, and AI deployment. Ask me about any specific skill!"
+    
+    # Projects queries
+    if any(k in text for k in ["project", "built", "created", "work", "portfolio"]):
+        if projects and len(projects) > 0:
+            proj_names = [p.get("name", "") for p in projects[:3]]
+            return f"I've built several AI projects including {', '.join(proj_names)}. My most notable work includes Rythu AI (crop disease detection), Memory to Lyrics Generator (multilingual AI), and this Portfolio Chatbot! Which project would you like to know more about?"
+        return "I've built AI projects including crop disease detection, multilingual lyrics generators, and AI chatbots. Ask me about any specific project!"
+    
+    # Learning/Education queries
+    if any(k in text for k in ["learn", "study", "education", "how did you", "advice"]):
+        return "I'm currently pursuing Diploma in ECE and planning B.Tech in CSE. I learn through building real projects — that's how I mastered NLP, RAG, and LLM development. My approach: start with basics, build small projects, and scale up. Want a learning roadmap for AI/ML?"
+    
+    # Contact queries
+    if any(k in text for k in ["contact", "email", "reach", "hire"]):
         email = personal.get("email", "")
         linkedin = personal.get("linkedin", "")
-        return f"You can reach me at {email} or via LinkedIn: {linkedin}."
-    if any(k in text for k in ["youtube", "channel", "videos"]):
-        return f"I run a YouTube channel called '{youtube.get('channel_name','Bharath Ai')}' focused on {youtube.get('focus','AI & Python tutorials')}."
-    return f"Hi — I'm {name}'s AI assistant. I can help with projects, learning plans, or portfolio info. What would you like to know?"
+        github = personal.get("github", "")
+        return f"You can reach me at {email}. Connect with me on LinkedIn: {linkedin} or check my GitHub: {github}. I'm open to AI/ML opportunities and collaborations!"
+    
+    # YouTube queries
+    if any(k in text for k in ["youtube", "channel", "videos", "tutorial"]):
+        yt_name = youtube.get("channel_name", "Bharath AI")
+        yt_focus = youtube.get("focus", "AI and LLM tutorials")
+        return f"I run '{yt_name}' on YouTube, where I teach {yt_focus}. The goal is to help people become LLM Engineers through practical, project-based learning. Check it out!"
+    
+    # Achievements/Goals
+    if any(k in text for k in ["achievement", "goal", "future", "plan", "proud"]):
+        if achievements:
+            return f"I'm proud to have {achievements[0].lower()}. My goal is to become a top AI/LLM Engineer, build production-ready RAG systems, and help others learn AI through my YouTube channel. I focus on solving real-world problems with AI!"
+        return "I've deployed 3 live AI apps before 18! My goal is to master LLM engineering, build impactful AI products, and teach AI through YouTube."
+    
+    # Technical queries
+    if any(k in text for k in ["rag", "vector", "embedding", "nlp", "llm", "hugging face", "fine-tun"]):
+        return "I work extensively with RAG systems, vector databases, embeddings, and NLP pipelines. I use Hugging Face for model deployment, implement TF-IDF, tokenization, and embedding-based retrieval. I'm also learning fine-tuning techniques for LLMs. What specific technical topic interests you?"
+    
+    # Default friendly response
+    return f"Hi! I'm {name}'s AI assistant. I can tell you about my AI/ML projects, NLP expertise, skills in RAG systems, or my YouTube channel. I've built 3 live AI applications and love teaching AI concepts. What would you like to know?"
 
 # ---- OpenRouter API call (requests) ----
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -222,9 +336,13 @@ def index():
     except Exception as e:
         logger.exception("Template error: %s", e)
         personal = portfolio_data.get("personal_info", {})
-        name = personal.get("name", "Bharath")
-        role = personal.get("role", "Aspiring AI Engineer")
-        skills = portfolio_data.get("skills", [])
+        name = personal.get("name", "Janagam Bharath")
+        role = personal.get("role", "AI / LLM Engineer")
+        skills_data = portfolio_data.get("skills", {})
+        if isinstance(skills_data, dict):
+            skills = skills_data.get("all_skills", [])
+        else:
+            skills = skills_data if isinstance(skills_data, list) else []
         return f"""
         <!doctype html><html><head><meta charset='utf-8'><title>{name} Chatbot</title></head><body style='font-family:Arial;padding:40px;text-align:center;'>
         <h1>🤖 {name}'s AI Assistant</h1><p>{role}</p><p>Top skills: {', '.join(skills[:5])}</p><a href='/health'>Health</a></body></html>
@@ -233,16 +351,20 @@ def index():
 @app.route("/health")
 def health():
     personal = portfolio_data.get("personal_info", {})
-    name = personal.get("name", "Bharath")
+    name = personal.get("name", "Janagam Bharath")
     projects = portfolio_data.get("projects", [])
-    skills = portfolio_data.get("skills", [])
+    skills_data = portfolio_data.get("skills", {})
+    if isinstance(skills_data, dict):
+        skills_count = len(skills_data.get("all_skills", []))
+    else:
+        skills_count = len(skills_data) if isinstance(skills_data, list) else 0
     uptime = int((datetime.utcnow() - startup_time).total_seconds())
     return jsonify({
         "status": "healthy",
         "api_configured": bool(OPENROUTER_API_KEY),
         "portfolio_name": name,
         "projects_count": len(projects),
-        "skills_count": len(skills),
+        "skills_count": skills_count,
         "uptime_seconds": uptime,
         "server_time_utc": datetime.utcnow().isoformat() + "Z"
     })
@@ -308,7 +430,7 @@ def ask():
     except Exception as e:
         logger.exception("Unhandled error in /ask: %s", e)
         personal = portfolio_data.get("personal_info", {})
-        name = personal.get("name", "Bharath")
+        name = personal.get("name", "Janagam Bharath")
         return jsonify({
             "reply": f"Hi! I'm {name}'s AI assistant. Something went wrong — please try again.",
             "status": "error"
@@ -317,6 +439,6 @@ def ask():
 # ---- Main ----
 if __name__ == "__main__":
     personal = portfolio_data.get("personal_info", {})
-    logger.info("Starting %s's AI Assistant on port %s", personal.get("name", "Bharath"), PORT)
+    logger.info("Starting %s's AI Assistant on port %s", personal.get("name", "Janagam Bharath"), PORT)
     logger.info("OpenRouter API configured: %s", bool(OPENROUTER_API_KEY))
     app.run(host="0.0.0.0", port=PORT, debug=os.getenv("FLASK_ENV") == "development")
