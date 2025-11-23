@@ -1,52 +1,106 @@
 {
   "personal_info": {
-    "name": "Bharath",
-    "role": "Student / Aspiring AI Engineer",
+    "name": "Janagam Bharath",
+    "role": "AI / LLM Engineer · NLP & Flask Developer",
     "email": "janagambharath1107@gmail.com",
     "location": "Hyderabad, India",
     "linkedin": "https://www.linkedin.com/in/janagam-bharath-9ab1b235b/",
     "github": "https://github.com/janagambharath",
     "resume": "https://bharath-portfolio-lvea.onrender.com/static/Janagam%20Bharath%20-%20Resume-1.pdf",
-    "website": "https://bharath-portfolio-lvea.onrender.com/"
+    "website": "https://bharath-portfolio-lvea.onrender.com/",
+    "summary": "Ambitious AI / LLM Engineer skilled in developing, fine-tuning, and deploying real-world NLP and RAG systems. Experienced in integrating Hugging Face models, building Flask backends, and deploying AI applications on Render and Hugging Face Spaces. Developed and deployed three live AI applications before turning 18."
   },
-  "skills": [
-    "Python",
-    "Flask",
-    "HTML",
-    "CSS",
-    "AI & Chatbots"
-  ],
+  "skills": {
+    "languages": ["Python", "C"],
+    "ai_ml_frameworks": ["Hugging Face", "PyTorch", "TensorFlow"],
+    "web_frameworks": ["Flask", "HTML", "CSS", "JavaScript"],
+    "nlp_concepts": ["RAG", "Vector Databases", "Embeddings", "TF-IDF", "Tokenization"],
+    "deployment": ["Render", "Hugging Face Spaces"],
+    "tools": ["Google Colab", "VS Code", "Git", "Postman"],
+    "all_skills": [
+      "Python", "C", "Flask", "HTML", "CSS", "JavaScript",
+      "Hugging Face", "PyTorch", "TensorFlow", 
+      "NLP", "RAG", "Vector Databases", "Embeddings", "TF-IDF",
+      "AI & Chatbots", "LLM Development", "Fine-tuning",
+      "Render", "Hugging Face Spaces", "Git"
+    ]
+  },
   "education": [
     {
-      "degree": "Diploma in ECE",
+      "degree": "Diploma in Electronics & Communication (ECE)",
       "institution": "Annamacharya Institute of Technology, Hyderabad",
-      "year": "Completed 2025"
+      "year": "3rd Year (Semester 6)",
+      "status": "Current"
     },
     {
-      "degree": "B.Tech CSE (via ECET)",
+      "degree": "B.Tech in CSE (via ECET)",
       "institution": "To be decided",
-      "year": "Starting 2025"
+      "year": "Planning to pursue",
+      "status": "Upcoming"
     }
   ],
   "projects": [
     {
-      "name": "Portfolio Website",
-      "description": "A Flask-based personal portfolio website integrated with an AI chatbot."
+      "name": "Rythu AI - Crop Disease Detection System",
+      "emoji": "🧠",
+      "description": "Built smart AI tool that detects crop diseases from leaf images using deep learning (MobileNet) and provides actionable farming advice. Deployed on Hugging Face Spaces with Flask backend for real-time use by farmers.",
+      "technologies": ["Deep Learning", "MobileNet", "Flask", "Hugging Face Spaces", "Computer Vision"],
+      "live_demo": "https://huggingface.co/spaces/janagambharath/rythu-ai",
+      "category": "AI/ML"
     },
     {
-      "name": "Bharath AI Chatbot",
-      "description": "An AI-powered personal assistant built with Python and Flask using Deepseek API, designed to answer portfolio-related queries and act as an interactive showcase of AI integration."
+      "name": "Memory to Lyrics Generator",
+      "emoji": "🎵",
+      "description": "Generates song lyrics from personal memories or emotions in Telugu, Hindi, and English using text-generation models. Implemented NLP pipelines integrated with Flask, focusing on multilingual support and creative text synthesis.",
+      "technologies": ["NLP", "Text Generation", "Flask", "Hugging Face", "Multilingual AI"],
+      "live_demo": "https://huggingface.co/spaces/janagambharath/memory-to-lyrics",
+      "category": "NLP"
+    },
+    {
+      "name": "Bharath AI - Portfolio Chatbot",
+      "emoji": "💬",
+      "description": "AI-powered portfolio chatbot that introduces projects, answers questions, and simulates an interactive resume. Built using Flask + Hugging Face API, demonstrating real-world chatbot workflow and prompt engineering.",
+      "technologies": ["Flask", "Hugging Face", "NLP", "Chatbot Development", "Prompt Engineering"],
+      "live_demo": "https://bharath-portfolio-lvea.onrender.com/",
+      "category": "AI Chatbot"
+    },
+    {
+      "name": "Flask Portfolio Website",
+      "emoji": "🌐",
+      "description": "Dark-themed, modern personal portfolio featuring project showcase, resume download, and smooth animations. Fully responsive design deployed on Render with mobile optimization.",
+      "technologies": ["Flask", "HTML", "CSS", "JavaScript", "Responsive Design"],
+      "live_demo": "https://bharath-portfolio-lvea.onrender.com/",
+      "category": "Web Development"
     }
   ],
+  "achievements": [
+    "Developed and deployed 3 live AI applications before turning 18",
+    "Created 'Bharath AI' YouTube channel teaching AI and LLM concepts",
+    "Former gaming YouTuber with video editing expertise",
+    "Specialized in Generative AI, LLM architectures, and AI-based creativity tools"
+  ],
+  "certifications_learning": [
+    "NLP Fundamentals: Implemented TF-IDF, Word Embeddings, Tokenization, RAG, Vector Databases",
+    "DSA in C: Arrays, recursion, sorting, linked lists",
+    "Self-learning: Fine-tuning, embedding-based retrieval, chatbot development"
+  ],
   "goals": [
-    "Become a skilled AI Engineer",
-    "Create an advanced interactive portfolio with AI features",
-    "Build impactful AI projects to showcase skills",
-    "Earn well and make parents proud"
+    "Become a skilled AI / LLM Engineer",
+    "Build advanced RAG systems and production-ready AI applications",
+    "Master fine-tuning techniques for LLMs",
+    "Create impactful AI projects that solve real-world problems",
+    "Help others learn AI through YouTube and open-source projects"
   ],
   "youtube": {
-    "channel_name": "Bharath Ai",
-    "focus": "AI, Python, and LLM Engineer journey — teaching beginners to build AI tools and chatbots through real projects and tutorials.",
-    "goal": "Help viewers become LLM Engineers in 180 days using simple, project-based learning."
+    "channel_name": "Bharath AI",
+    "channel_url": "https://www.youtube.com/@Bharath-ai",
+    "focus": "Teaching AI, LLM concepts, NLP, and practical AI development through project-based tutorials",
+    "goal": "Help viewers become LLM Engineers in 180 days using simple, project-based learning",
+    "topics": ["AI/ML", "NLP", "LLM Development", "Hugging Face", "Flask", "Python", "RAG Systems"]
+  },
+  "expertise": {
+    "primary": ["AI/ML Development", "NLP", "LLM Engineering", "Flask Backend Development"],
+    "secondary": ["RAG Systems", "Vector Databases", "Embeddings", "Chatbot Development", "Model Deployment"],
+    "learning": ["Fine-tuning LLMs", "Advanced RAG Architectures", "Production AI Systems"]
   }
 }
