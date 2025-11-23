@@ -158,7 +158,7 @@ def get_enhanced_fallback(user_input):
 # ---- OpenRouter API call (requests) ----
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-def call_openrouter_api(messages, model="deepseek/deepseek-chat-v3.1:free", max_tokens=800, temperature=0.7, timeout=20):
+def call_openrouter_api(messages, model="meta-llama/llama-3.2-3b-instruct:free", max_tokens=800, temperature=0.7, timeout=20):
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY not configured")
 
