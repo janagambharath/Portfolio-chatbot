@@ -19,7 +19,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free")
 PORTFOLIO_FILE = os.getenv("PORTFOLIO_FILE", "portfolio.json")
 SESSIONS_FILE = os.getenv("SESSIONS_FILE", "chat_sessions.json")
-MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "8"))  # 8 turns = 16 messages
+MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "6"))  # Reduced from 8
 MAX_SESSIONS = int(os.getenv("MAX_SESSIONS", "1000"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "30"))
@@ -38,7 +38,7 @@ logger = logging.getLogger("bharath_ai_app")
 # ---- App init ----
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["JSON_SORT_KEYS"] = False
-CORS(app)  # ✅ FIX: Enable CORS for cross-origin requests
+CORS(app)
 
 # ---- In-memory stores ----
 chat_sessions = {}
@@ -116,178 +116,139 @@ def rate_limit():
         return wrapped
     return decorator
 
-# ---- System prompt & fallback ----
+# ---- ✅ FIXED: Concise System Prompt (under 500 tokens) ----
 def get_system_prompt():
+    """
+    ✅ FIX: Dramatically shortened system prompt to prevent repetition
+    Focus on personality, tone, and essential facts only
+    """
     p = portfolio_data.get("personal_info", {})
     name = p.get("name", "Janagam Bharath")
     role = p.get("role", "AI / LLM Engineer")
-    location = p.get("location", "Hyderabad, India")
-    email = p.get("email", "janagambharath1107@gmail.com")
-    linkedin = p.get("linkedin", "")
-    github = p.get("github", "")
-    summary = p.get("summary", "")
     
-    # Get skills - handle both old and new format
+    # Get top 5 skills
     skills_data = portfolio_data.get("skills", {})
     if isinstance(skills_data, dict):
-        all_skills = skills_data.get("all_skills", [])
-        languages = skills_data.get("languages", [])
-        ai_frameworks = skills_data.get("ai_ml_frameworks", [])
-        nlp = skills_data.get("nlp_concepts", [])
+        skills = skills_data.get("all_skills", [])[:5]
     else:
-        all_skills = skills_data if isinstance(skills_data, list) else []
-        languages = []
-        ai_frameworks = []
-        nlp = []
+        skills = skills_data[:5] if isinstance(skills_data, list) else []
+    skills_str = ", ".join(skills) if skills else "AI/ML, NLP, Flask, RAG"
     
-    # Get projects
-    projects = portfolio_data.get("projects", [])
-    proj_text = ""
-    for proj in projects:
-        name_p = proj.get("name", "Unknown Project")
-        desc = proj.get("description", "")
-        tech = proj.get("technologies", [])
-        demo = proj.get("live_demo", "")
-        proj_text += f"\n- {name_p}: {desc}"
-        if tech:
-            proj_text += f" | Tech: {', '.join(tech[:3])}"
-        if demo:
-            proj_text += f" | Demo: {demo}"
+    # Get top 2 projects
+    projects = portfolio_data.get("projects", [])[:2]
+    proj_str = ""
+    if projects:
+        proj_names = [p.get("name", "") for p in projects]
+        proj_str = f"Key projects: {', '.join(proj_names)}"
     
-    # Get achievements
-    achievements = portfolio_data.get("achievements", [])
-    achievements_text = "\n".join([f"- {a}" for a in achievements[:4]]) if achievements else ""
-    
-    # Get YouTube info
-    youtube = portfolio_data.get("youtube", {})
-    yt_name = youtube.get("channel_name", "Bharath AI")
-    yt_focus = youtube.get("focus", "AI and LLM tutorials")
-    
-    # Get education
-    education = portfolio_data.get("education", [])
-    edu_text = ""
-    if education and len(education) > 0:
-        edu_text = f"\n- Current: {education[0].get('degree', '')} at {education[0].get('institution', 'Hyderabad')}"
-    
-    skills_summary = ", ".join(all_skills[:10]) if all_skills else "Python, Flask, AI, NLP, RAG"
-    
-    prompt = (
-        f"You are {name}'s AI assistant. Keep responses friendly, concise (3-5 sentences), and enthusiastic.\n\n"
-        f"=== PORTFOLIO INFORMATION ===\n"
-        f"Name: {name}\n"
-        f"Role: {role}\n"
-        f"Location: {location}\n"
-        f"Email: {email}\n"
-        f"LinkedIn: {linkedin}\n"
-        f"GitHub: {github}\n"
-        f"\nSummary: {summary}\n"
-        f"\n=== SKILLS ===\n"
-        f"Core Skills: {skills_summary}\n"
-    )
-    
-    if languages:
-        prompt += f"Languages: {', '.join(languages)}\n"
-    if ai_frameworks:
-        prompt += f"AI/ML: {', '.join(ai_frameworks)}\n"
-    if nlp:
-        prompt += f"NLP Expertise: {', '.join(nlp)}\n"
-    
-    prompt += f"\n=== PROJECTS ==={proj_text}\n"
-    
-    if achievements_text:
-        prompt += f"\n=== KEY ACHIEVEMENTS ===\n{achievements_text}\n"
-    
-    if edu_text:
-        prompt += f"\n=== EDUCATION ==={edu_text}\n"
-    
-    prompt += (
-        f"\n=== YOUTUBE CHANNEL ===\n"
-        f"Channel: {yt_name}\n"
-        f"Focus: {yt_focus}\n"
-        f"\n=== GUIDELINES ===\n"
-        f"- Be helpful, enthusiastic, and conversational\n"
-        f"- Keep answers natural and engaging (no markdown formatting)\n"
-        f"- When asked about projects, mention the live demo links\n"
-        f"- Highlight Bharath's expertise in AI/LLM, NLP, RAG systems, and practical deployment\n"
-        f"- Emphasize his achievement of deploying 3 live AI apps before turning 18\n"
-        f"- If asked technical questions, demonstrate knowledge of NLP, embeddings, vector databases, and Flask\n"
-    )
+    # ✅ CRITICAL: Keep system prompt SHORT and CLEAR
+    prompt = f"""You are {name}'s AI assistant. You're friendly, helpful, and enthusiastic!
+
+ABOUT {name}:
+- Role: {role} from Hyderabad, India
+- Top Skills: {skills_str}
+- {proj_str}
+- Built 3 live AI apps before turning 18
+- Runs 'Bharath AI' YouTube channel teaching AI/LLM concepts
+- Email: {p.get("email", "janagambharath1107@gmail.com")}
+
+RESPONSE STYLE:
+- Be conversational and natural (2-4 sentences usually)
+- Vary your responses - don't repeat the same phrases
+- Be specific when asked about projects/skills
+- Show enthusiasm about AI and learning
+- If asked about something not in your knowledge, suggest checking the portfolio website or contacting directly
+
+IMPORTANT: Give DIFFERENT answers each time, even for similar questions. Be creative and natural!"""
     
     return prompt
 
-def get_enhanced_fallback(user_input):
+# ---- ✅ FIXED: Improved Fallback with Better Context Awareness ----
+def get_enhanced_fallback(user_input, conversation_history=None):
+    """
+    ✅ FIX: Better fallback responses with context awareness
+    """
     personal = portfolio_data.get("personal_info", {})
     name = personal.get("name", "Janagam Bharath")
     role = personal.get("role", "AI / LLM Engineer")
-    location = personal.get("location", "Hyderabad, India")
     
-    skills_data = portfolio_data.get("skills", {})
-    if isinstance(skills_data, dict):
-        skills = skills_data.get("all_skills", [])
-    else:
-        skills = skills_data if isinstance(skills_data, list) else []
-    
-    projects = portfolio_data.get("projects", [])
-    youtube = portfolio_data.get("youtube", {})
-    achievements = portfolio_data.get("achievements", [])
-
     text = (user_input or "").lower()
     
-    # Portfolio/About queries
+    # ✅ Check conversation history to avoid repetition
+    if conversation_history:
+        recent_responses = [msg.get("content", "") for msg in conversation_history[-4:] if msg.get("role") == "assistant"]
+        recent_text = " ".join(recent_responses).lower()
+    else:
+        recent_text = ""
+    
+    # Portfolio/About queries - with variations
     if any(k in text for k in ["portfolio", "about", "who are you", "who is", "introduce"]):
-        skills_short = ", ".join(skills[:6]) if skills else "AI/ML, NLP, Flask, RAG"
-        return f"Hi! I'm {name}, an {role} based in {location}. I specialize in building real-world AI applications using NLP, RAG systems, and Flask. My core skills include {skills_short}. I've deployed 3 live AI apps before turning 18! Ask me about any specific project or skill."
+        responses = [
+            f"Hey! I'm {name}, an {role} based in Hyderabad. I'm passionate about building real AI applications - I've already deployed 3 live AI apps! I specialize in NLP, RAG systems, and Flask development. What would you like to know more about?",
+            f"Hi there! I'm {name}. I work on AI/ML projects, focusing on NLP and chatbot development. I've built cool projects like Rythu AI (crop disease detection) and a Memory-to-Lyrics Generator. Ask me about any specific project!",
+            f"I'm {name}, a young AI developer from Hyderabad! I love creating practical AI solutions. My background includes working with Hugging Face, Flask, and RAG systems. I also run a YouTube channel teaching AI concepts. What interests you?"
+        ]
+        # Pick response that hasn't been used recently
+        for resp in responses:
+            if resp[:50].lower() not in recent_text:
+                return resp
+        return responses[0]
     
-    # Skills queries
-    if any(k in text for k in ["skill", "technology", "tech stack", "what do you know"]):
-        if skills:
-            primary = ", ".join(skills[:8])
-            return f"I'm proficient in {primary}. I specialize in AI/LLM development, NLP, RAG systems, vector databases, and deploying AI apps on Hugging Face Spaces and Render. Want to know more about any specific technology?"
-        return "I work with Python, Flask, Hugging Face, NLP, RAG, Vector Databases, and AI deployment. Ask me about any specific skill!"
+    # Skills queries - with variations
+    if any(k in text for k in ["skill", "technology", "tech stack", "what do you know", "what can you"]):
+        responses = [
+            "My core skills include Python, Flask, Hugging Face, NLP, RAG systems, and Vector Databases. I'm experienced in deploying AI apps on Render and Hugging Face Spaces. What specific technology are you interested in?",
+            "I work with a variety of AI/ML tools! Python is my main language, and I use Flask for backend development. I'm skilled in NLP concepts like embeddings, TF-IDF, and RAG architectures. Want to dive deeper into any of these?",
+            "I specialize in AI development - from building models with Hugging Face to creating complete Flask applications. My expertise includes NLP, chatbot development, and deploying production-ready AI systems. Which area interests you most?"
+        ]
+        for resp in responses:
+            if resp[:50].lower() not in recent_text:
+                return resp
+        return responses[0]
     
-    # Projects queries
-    if any(k in text for k in ["project", "built", "created", "work", "portfolio"]):
-        if projects and len(projects) > 0:
-            proj_names = [p.get("name", "") for p in projects[:3]]
-            return f"I've built several AI projects including {', '.join(proj_names)}. My most notable work includes Rythu AI (crop disease detection), Memory to Lyrics Generator (multilingual AI), and this Portfolio Chatbot! Which project would you like to know more about?"
-        return "I've built AI projects including crop disease detection, multilingual lyrics generators, and AI chatbots. Ask me about any specific project!"
-    
-    # Learning/Education queries
-    if any(k in text for k in ["learn", "study", "education", "how did you", "advice"]):
-        return "I'm currently pursuing Diploma in ECE and planning B.Tech in CSE. I learn through building real projects — that's how I mastered NLP, RAG, and LLM development. My approach: start with basics, build small projects, and scale up. Want a learning roadmap for AI/ML?"
+    # Projects queries - with variations
+    if any(k in text for k in ["project", "built", "created", "work", "app"]):
+        responses = [
+            "I've built several cool AI projects! My favorites are Rythu AI (helps farmers detect crop diseases), Memory to Lyrics Generator (creates songs from memories in multiple languages), and this portfolio chatbot. Which one would you like to know more about?",
+            "My main projects include: 1) Rythu AI - a smart crop disease detection system using deep learning, 2) A multilingual lyrics generator powered by NLP, and 3) This AI chatbot you're talking to! They're all live and deployed. Want details on any?",
+            "I've deployed 3 live AI applications! There's Rythu AI for farmers, a creative lyrics generator, and this interactive portfolio bot. Each one taught me different aspects of AI development and deployment. Which catches your interest?"
+        ]
+        for resp in responses:
+            if resp[:50].lower() not in recent_text:
+                return resp
+        return responses[0]
     
     # Contact queries
-    if any(k in text for k in ["contact", "email", "reach", "hire"]):
-        email = personal.get("email", "")
+    if any(k in text for k in ["contact", "email", "reach", "hire", "connect"]):
+        email = personal.get("email", "janagambharath1107@gmail.com")
         linkedin = personal.get("linkedin", "")
-        github = personal.get("github", "")
-        return f"You can reach me at {email}. Connect with me on LinkedIn: {linkedin} or check my GitHub: {github}. I'm open to AI/ML opportunities and collaborations!"
+        return f"I'd love to connect! Reach me at {email} or on LinkedIn: {linkedin}. I'm always open to discussing AI projects, collaborations, or learning opportunities!"
     
     # YouTube queries
-    if any(k in text for k in ["youtube", "channel", "videos", "tutorial"]):
-        yt_name = youtube.get("channel_name", "Bharath AI")
-        yt_focus = youtube.get("focus", "AI and LLM tutorials")
-        return f"I run '{yt_name}' on YouTube, where I teach {yt_focus}. The goal is to help people become LLM Engineers through practical, project-based learning. Check it out!"
+    if any(k in text for k in ["youtube", "channel", "videos", "tutorial", "teach"]):
+        return "I run 'Bharath AI' on YouTube where I teach AI and LLM concepts through practical projects. My goal is to help people become LLM Engineers in 180 days using simple, hands-on learning. Check it out if you're interested in AI development!"
     
-    # Achievements/Goals
-    if any(k in text for k in ["achievement", "goal", "future", "plan", "proud"]):
-        if achievements:
-            return f"I'm proud to have {achievements[0].lower()}. My goal is to become a top AI/LLM Engineer, build production-ready RAG systems, and help others learn AI through my YouTube channel. I focus on solving real-world problems with AI!"
-        return "I've deployed 3 live AI apps before 18! My goal is to master LLM engineering, build impactful AI products, and teach AI through YouTube."
+    # Learning/Advice queries
+    if any(k in text for k in ["learn", "how to", "advice", "tips", "start", "begin"]):
+        return "My learning approach? Build, build, build! Start with the basics, create small projects, then scale up. That's how I learned NLP, RAG, and LLM development. Focus on practical implementation rather than just theory. Want specific learning resources for AI/ML?"
+    
+    # Goals queries
+    if any(k in text for k in ["goal", "future", "plan", "aspiration", "want to"]):
+        return "My goal is to become a top AI/LLM Engineer! I want to build production-ready RAG systems, master fine-tuning techniques, and create AI products that solve real problems. I'm also passionate about teaching AI through my YouTube channel. The journey is exciting!"
     
     # Technical queries
-    if any(k in text for k in ["rag", "vector", "embedding", "nlp", "llm", "hugging face", "fine-tun"]):
-        return "I work extensively with RAG systems, vector databases, embeddings, and NLP pipelines. I use Hugging Face for model deployment, implement TF-IDF, tokenization, and embedding-based retrieval. I'm also learning fine-tuning techniques for LLMs. What specific technical topic interests you?"
+    if any(k in text for k in ["rag", "vector", "embedding", "nlp", "llm", "model", "fine-tun"]):
+        return "I love working with RAG systems and NLP! I have hands-on experience with vector databases, embeddings, and building retrieval pipelines. I use Hugging Face for model deployment and I'm currently learning fine-tuning techniques for LLMs. What specific technical aspect interests you?"
     
-    # Default friendly response
-    return f"Hi! I'm {name}'s AI assistant. I can tell you about my AI/ML projects, NLP expertise, skills in RAG systems, or my YouTube channel. I've built 3 live AI applications and love teaching AI concepts. What would you like to know?"
+    # Default - encourage specific questions
+    return f"I'm {name}'s AI assistant! I can tell you about my AI/ML projects, technical skills, experience with NLP and RAG systems, or my journey as a young developer. I've built 3 live AI applications and love teaching on YouTube. What specific area would you like to explore?"
 
-# ---- OpenRouter API call (requests) ----
+# ---- OpenRouter API call ----
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.7, timeout=30):
+def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.85, timeout=30):
     """
-    ✅ FIXED: Better error handling, timeout increased, detailed error messages
+    ✅ FIXED: Increased temperature to 0.85 for more varied responses
     """
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY not configured")
@@ -302,11 +263,15 @@ def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.7, t
         "X-Title": SITE_NAME
     }
 
+    # ✅ FIX: Added presence_penalty and frequency_penalty to reduce repetition
     payload = {
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
-        "temperature": temperature
+        "temperature": temperature,
+        "presence_penalty": 0.6,  # Penalize repeating topics
+        "frequency_penalty": 0.7,  # Penalize repeating tokens
+        "top_p": 0.9
     }
 
     try:
@@ -321,7 +286,6 @@ def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.7, t
         logger.error("OpenRouter API request error: %s", e)
         raise RuntimeError(f"OpenRouter API request failed: {str(e)}")
 
-    # ✅ FIX: Better error handling for different status codes
     if resp.status_code != 200:
         text = resp.text
         logger.warning("OpenRouter API error %s: %s", resp.status_code, text[:400])
@@ -369,19 +333,14 @@ def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.7, t
 
 # ---- Session cleanup ----
 def cleanup_old_sessions():
-    """
-    ✅ FIX: Prevent infinite session growth
-    """
     global chat_sessions
     if len(chat_sessions) > MAX_SESSIONS:
         logger.info("Cleaning up old sessions (current: %d, max: %d)", len(chat_sessions), MAX_SESSIONS)
-        # Sort by last message timestamp (most recent first)
         sorted_sessions = sorted(
             chat_sessions.items(), 
             key=lambda x: x[1][-1].get('ts', '') if x[1] else '', 
             reverse=True
         )
-        # Keep only the most recent MAX_SESSIONS
         chat_sessions = dict(sorted_sessions[:MAX_SESSIONS])
         logger.info("Kept %d most recent sessions", len(chat_sessions))
 
@@ -399,21 +358,13 @@ def index():
         personal = portfolio_data.get("personal_info", {})
         name = personal.get("name", "Janagam Bharath")
         role = personal.get("role", "AI / LLM Engineer")
-        skills_data = portfolio_data.get("skills", {})
-        if isinstance(skills_data, dict):
-            skills = skills_data.get("all_skills", [])
-        else:
-            skills = skills_data if isinstance(skills_data, list) else []
         return f"""
         <!doctype html><html><head><meta charset='utf-8'><title>{name} Chatbot</title></head><body style='font-family:Arial;padding:40px;text-align:center;'>
-        <h1>🤖 {name}'s AI Assistant</h1><p>{role}</p><p>Top skills: {', '.join(skills[:5])}</p><a href='/health'>Health</a></body></html>
+        <h1>🤖 {name}'s AI Assistant</h1><p>{role}</p><a href='/health'>Health</a></body></html>
         """
 
 @app.route("/health")
 def health():
-    """
-    ✅ FIX: Added API key length for debugging (without exposing the key)
-    """
     personal = portfolio_data.get("personal_info", {})
     name = personal.get("name", "Janagam Bharath")
     projects = portfolio_data.get("projects", [])
@@ -426,7 +377,6 @@ def health():
     
     api_configured = bool(OPENROUTER_API_KEY)
     
-    # Log warning if API key not configured
     if not api_configured:
         logger.warning("Health check: OpenRouter API key NOT configured!")
     
@@ -459,17 +409,15 @@ def sessions():
 def ask():
     """
     ✅ FIXED:
-    - UUID-based session IDs (no collision)
-    - Proper JSON error handling
-    - Consistent session trimming (16 messages = 8 turns)
-    - Request ID logging
-    - Better error messages
+    - Better conversation history management
+    - Improved system prompt
+    - Better fallback with context awareness
+    - Added anti-repetition measures
     """
     request_id = str(uuid.uuid4())[:8]
     logger.info(f"[{request_id}] New chat request")
     
     try:
-        # ✅ FIX: Better JSON parsing with proper error handling
         try:
             data = request.get_json(force=True)
             if not data:
@@ -480,7 +428,6 @@ def ask():
             return jsonify({"error": "invalid_json", "message": str(e)}), 400
         
         user_input = (data.get("message") or "").strip()
-        # ✅ FIX: Use UUID for session IDs to avoid collisions
         session_id = data.get("session_id") or f"session_{uuid.uuid4().hex}"
 
         if not user_input:
@@ -499,7 +446,7 @@ def ask():
             "ts": datetime.utcnow().isoformat()
         })
         
-        # ✅ FIX: Consistent session trimming (keep last 16 messages = 8 turns)
+        # ✅ FIX: Trim session to prevent context overflow (6 turns = 12 messages)
         if len(session) > MAX_HISTORY_TURNS * 2:
             session = session[-(MAX_HISTORY_TURNS * 2):]
             chat_sessions[session_id] = session
@@ -510,12 +457,19 @@ def ask():
 
         if OPENROUTER_API_KEY:
             try:
+                # ✅ FIX: Improved system prompt (short and clear)
                 system_msg = {"role": "system", "content": get_system_prompt()}
-                # ✅ FIX: Build message history correctly (last 16 messages = 8 turns)
+                
+                # ✅ FIX: Build clean conversation history
                 recent = [
                     {"role": m.get("role"), "content": m.get("content")} 
                     for m in session[-(MAX_HISTORY_TURNS * 2):]
                 ]
+                
+                # ✅ FIX: Add instruction to prevent repetition
+                if len(recent) > 2:
+                    system_msg["content"] += "\n\nREMINDER: Review the conversation history and give a FRESH, DIFFERENT response. Don't repeat what you've already said!"
+                
                 messages = [system_msg] + recent
                 
                 logger.info(f"[{request_id}] Calling OpenRouter with {len(messages)} messages")
@@ -525,12 +479,12 @@ def ask():
                 
             except Exception as e:
                 logger.exception(f"[{request_id}] OpenRouter API failed: {e}")
-                bot_reply = get_enhanced_fallback(user_input)
+                bot_reply = get_enhanced_fallback(user_input, session)
                 api_success = False
                 logger.info(f"[{request_id}] Using fallback response")
         else:
             logger.warning(f"[{request_id}] No OPENROUTER_API_KEY - using fallback")
-            bot_reply = get_enhanced_fallback(user_input)
+            bot_reply = get_enhanced_fallback(user_input, session)
             api_success = False
 
         # Add assistant response
@@ -540,7 +494,7 @@ def ask():
             "ts": datetime.utcnow().isoformat()
         })
         
-        # ✅ FIX: Consistent trimming after adding assistant message
+        # Trim again after adding assistant message
         if len(session) > MAX_HISTORY_TURNS * 2:
             chat_sessions[session_id] = session[-(MAX_HISTORY_TURNS * 2):]
 
@@ -580,6 +534,7 @@ if __name__ == "__main__":
         logger.info("API Key length: %d characters", len(OPENROUTER_API_KEY))
     logger.info("Default Model: %s", DEFAULT_MODEL)
     logger.info("Max History Turns: %d (= %d messages)", MAX_HISTORY_TURNS, MAX_HISTORY_TURNS * 2)
+    logger.info("Temperature: 0.85 (higher = more varied responses)")
     logger.info("=" * 60)
     
     app.run(
