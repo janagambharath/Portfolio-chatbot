@@ -372,6 +372,7 @@ def cleanup_old_sessions():
     """
     ✅ FIX: Prevent infinite session growth
     """
+    global chat_sessions
     if len(chat_sessions) > MAX_SESSIONS:
         logger.info("Cleaning up old sessions (current: %d, max: %d)", len(chat_sessions), MAX_SESSIONS)
         # Sort by last message timestamp (most recent first)
@@ -381,7 +382,6 @@ def cleanup_old_sessions():
             reverse=True
         )
         # Keep only the most recent MAX_SESSIONS
-        global chat_sessions
         chat_sessions = dict(sorted_sessions[:MAX_SESSIONS])
         logger.info("Kept %d most recent sessions", len(chat_sessions))
 
