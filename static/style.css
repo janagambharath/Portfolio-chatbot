@@ -236,12 +236,15 @@ body {
     flex: 1;
     padding: 30px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 20px;
     background: linear-gradient(to bottom, #f8fafc, #e2e8f0);
     position: relative;
     transition: background 0.3s ease;
+    min-height: 0; /* Critical for flex scrolling */
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -748,6 +751,7 @@ body.theme-orange #sendButton:hover:not(:disabled) {
 @media (max-width: 768px) {
     body {
         padding: 0;
+        overflow: hidden;
     }
     
     /* ✅ FIX: Better mobile viewport handling */
@@ -757,115 +761,218 @@ body.theme-orange #sendButton:hover:not(:disabled) {
         margin: 0;
         border-radius: 0;
         max-width: 100%;
+        display: flex;
+        flex-direction: column;
     }
     
     .chat-header {
-        padding: 20px;
+        padding: 15px 20px;
+        flex-shrink: 0;
     }
     
     .chat-header h1 {
-        font-size: 1.5rem;
+        font-size: 1.3rem;
+        margin-bottom: 5px;
     }
     
     .chat-header p {
-        font-size: 1rem;
+        font-size: 0.85rem;
     }
     
+    .chat-header h1 i {
+        margin-right: 8px;
+    }
+    
+    /* Make message bubbles smaller on mobile */
     .message-content {
-        max-width: 85%;
-        padding: 15px 18px;
-        font-size: 0.95rem;
+        max-width: 80%;
+        padding: 12px 15px;
+        font-size: 0.9rem;
+        line-height: 1.5;
     }
     
+    /* Fix chat messages scrolling */
     .chat-messages {
-        padding: 20px;
-        gap: 15px;
+        flex: 1;
+        padding: 15px;
+        gap: 12px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        min-height: 0; /* Important for flex scrolling */
     }
     
     .chat-input {
-        padding: 20px;
-        gap: 12px;
+        padding: 15px;
+        gap: 10px;
+        flex-shrink: 0;
     }
     
     #messageInput {
-        padding: 12px 18px;
-        font-size: 16px;
+        padding: 12px 15px;
+        font-size: 16px; /* Prevents zoom on iOS */
+        border-radius: 20px;
     }
     
     #sendButton {
-        padding: 12px 20px;
-        min-width: 100px;
-        font-size: 0.9rem;
+        padding: 12px 18px;
+        min-width: 80px;
+        font-size: 0.85rem;
+        border-radius: 20px;
     }
     
     .welcome-message {
-        padding: 30px 15px;
-        margin: 15px 0;
-        font-size: 1rem;
+        padding: 25px 15px;
+        margin: 10px 0;
+        font-size: 0.95rem;
     }
     
     .welcome-message i {
-        font-size: 2.5rem;
-        margin-bottom: 15px;
+        font-size: 2rem;
+        margin-bottom: 12px;
     }
 
     .quick-replies {
-        padding: 10px 20px 0;
+        padding: 8px 15px 0;
+        flex-shrink: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Hide scrollbar on Firefox */
+    }
+    
+    .quick-replies::-webkit-scrollbar {
+        display: none; /* Hide scrollbar on Chrome/Safari */
     }
 
     .quick-reply-btn {
-        padding: 8px 14px;
-        font-size: 0.85rem;
+        padding: 7px 12px;
+        font-size: 0.8rem;
+        white-space: nowrap;
     }
 
     .theme-controls {
-        top: 10px;
-        right: 10px;
-        gap: 8px;
+        top: 8px;
+        right: 8px;
+        gap: 6px;
     }
 
     .theme-btn {
-        width: 35px;
-        height: 35px;
-        font-size: 1rem;
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
     }
 
     .action-buttons {
-        padding: 0 20px 10px;
+        padding: 0 15px 8px;
+        flex-shrink: 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    
+    .action-buttons::-webkit-scrollbar {
+        display: none;
     }
 
     .action-btn {
-        padding: 8px 16px;
-        font-size: 0.85rem;
+        padding: 7px 14px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+    
+    /* Smaller avatars on mobile */
+    .message-avatar {
+        width: 38px;
+        height: 38px;
+        font-size: 1rem;
+    }
+    
+    /* Voice button */
+    .voice-btn {
+        padding: 12px;
+        min-width: 45px;
+        font-size: 0.9rem;
     }
 }
 
 @media (max-width: 480px) {
+    .chat-header {
+        padding: 12px 15px;
+    }
+    
     .chat-header h1 {
-        font-size: 1.3rem;
+        font-size: 1.1rem;
+        margin-bottom: 3px;
     }
     
     .chat-header p {
-        font-size: 0.9rem;
+        font-size: 0.75rem;
     }
     
     .message-content {
-        max-width: 90%;
-        padding: 12px 16px;
+        max-width: 85%;
+        padding: 10px 13px;
+        font-size: 0.85rem;
     }
     
     .chat-messages {
-        padding: 15px;
+        padding: 12px;
+        gap: 10px;
     }
     
     .chat-input {
-        padding: 15px;
+        padding: 12px;
+        gap: 8px;
     }
     
     .message-avatar {
-        width: 40px;
-        height: 40px;
-        font-size: 1.1rem;
+        width: 35px;
+        height: 35px;
+        font-size: 0.95rem;
+    }
+    
+    #messageInput {
+        padding: 10px 14px;
+        font-size: 16px;
+        border-radius: 18px;
+    }
+    
+    #sendButton {
+        padding: 10px 16px;
+        min-width: 70px;
+        font-size: 0.8rem;
+        border-radius: 18px;
+    }
+    
+    .voice-btn {
+        padding: 10px;
+        min-width: 40px;
+    }
+    
+    .quick-reply-btn {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+    
+    .action-btn {
+        padding: 6px 12px;
+        font-size: 0.75rem;
+    }
+    
+    .theme-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 0.85rem;
+    }
+    
+    .welcome-message {
+        padding: 20px 12px;
+        font-size: 0.85rem;
+    }
+    
+    .welcome-message i {
+        font-size: 1.8rem;
+        margin-bottom: 10px;
     }
 }
 
