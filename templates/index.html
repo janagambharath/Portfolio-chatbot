@@ -86,10 +86,13 @@
     </div>
 
     <script>
+        // ✅ FIX: Session persistence
+        let sessionId = localStorage.getItem('chatSessionId') || null;
         let isTyping = false;
         let recognition = null;
         let currentTheme = localStorage.getItem('theme') || 'purple';
         let isDarkMode = localStorage.getItem('darkMode') === 'true';
+        let messageCount = 0;
 
         // Initialize theme on load
         document.body.classList.add(`theme-${currentTheme}`);
@@ -181,10 +184,14 @@
             
             if (message === '' || isTyping) return;
 
+            messageCount++;
+
             // Hide quick replies after first message
-            const quickReplies = document.getElementById('quickReplies');
-            if (quickReplies) {
-                quickReplies.style.display = 'none';
+            if (messageCount === 1) {
+                const quickReplies = document.getElementById('quickReplies');
+                if (quickReplies) {
+                    quickReplies.style.display = 'none';
+                }
             }
 
             // Clear welcome message
@@ -206,20 +213,45 @@
             // Add typing indicator
             const typingMessage = addMessage('', 'bot', true);
             
+            // ✅ FIX: Add timeout and better error handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
             try {
                 console.log('Sending message to /ask endpoint:', message);
+                console.log('Session ID:', sessionId);
                 
                 const response = await fetch('/ask', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ message: message }),
+                    body: JSON.stringify({ 
+                        message: message,
+                        session_id: sessionId  // ✅ FIX: Include session ID
+                    }),
+                    signal: controller.signal
                 });
 
+                clearTimeout(timeoutId);
+
                 console.log('Response status:', response.status);
+                
+                // ✅ FIX: Check response status
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+                }
+                
                 const data = await response.json();
                 console.log('Response data:', data);
+                
+                // ✅ FIX: Save session ID for future requests
+                if (data.session_id && !sessionId) {
+                    sessionId = data.session_id;
+                    localStorage.setItem('chatSessionId', sessionId);
+                    console.log('Session ID saved:', sessionId);
+                }
                 
                 // Remove typing indicator
                 typingMessage.remove();
@@ -227,14 +259,35 @@
                 if (data.reply) {
                     // Add bot response with word-by-word animation
                     await addStreamingMessage(data.reply, 'bot');
+                    
+                    // Show status if using fallback
+                    if (data.status === 'fallback') {
+                        console.warn('Using fallback response (API may not be configured)');
+                    }
                 } else {
                     addMessage('Sorry, I received an empty response. Please try again.', 'bot');
                 }
                 
             } catch (error) {
+                clearTimeout(timeoutId);
                 console.error('Fetch error:', error);
                 typingMessage.remove();
-                addMessage('Sorry, I encountered an error connecting to the server. Please check if the server is running and try again.', 'bot');
+                
+                // ✅ FIX: Better error messages
+                let errorMsg = 'Sorry, I encountered an error. ';
+                if (error.name === 'AbortError') {
+                    errorMsg += 'The request timed out. Please try again.';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMsg += 'Cannot connect to server. Please check if the server is running.';
+                } else if (error.message.includes('429')) {
+                    errorMsg += 'Too many requests. Please wait a moment and try again.';
+                } else if (error.message.includes('500')) {
+                    errorMsg += 'Server error. Please try again in a moment.';
+                } else {
+                    errorMsg += error.message;
+                }
+                
+                addMessage(errorMsg, 'bot');
             } finally {
                 // Re-enable input and button
                 input.disabled = false;
@@ -313,8 +366,21 @@
             }
         }
 
+        // ✅ FIX: Clear session button (optional - for testing)
+        function clearSession() {
+            localStorage.removeItem('chatSessionId');
+            sessionId = null;
+            console.log('Session cleared');
+        }
+
         // Initial focus on input
         document.getElementById('messageInput').focus();
+
+        // Log session info on load
+        console.log('Chat initialized');
+        console.log('Session ID:', sessionId || 'New session will be created');
+        console.log('Theme:', currentTheme);
+        console.log('Dark mode:', isDarkMode);
     </script>
 </body>
 </html>
