@@ -750,8 +750,10 @@ body.theme-orange #sendButton:hover:not(:disabled) {
         padding: 0;
     }
     
+    /* ✅ FIX: Better mobile viewport handling */
     .chat-container {
-        height: 100vh;
+        height: 100dvh; /* Dynamic viewport height for mobile */
+        height: 100vh; /* Fallback */
         margin: 0;
         border-radius: 0;
         max-width: 100%;
