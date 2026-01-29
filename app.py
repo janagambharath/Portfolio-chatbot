@@ -3,30 +3,42 @@ import json
 import time
 import atexit
 import logging
+import uuid
 from datetime import datetime
 from functools import wraps
 
 import requests
 from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask_cors import CORS
 
 # ---- Configuration ----
 PORT = int(os.getenv("PORT", 10000))
 SITE_URL = os.getenv("SITE_URL", "https://bharath-portfolio-lvea.onrender.com/")
 SITE_NAME = os.getenv("SITE_NAME", "Bharath's AI Portfolio")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free")
 PORTFOLIO_FILE = os.getenv("PORTFOLIO_FILE", "portfolio.json")
 SESSIONS_FILE = os.getenv("SESSIONS_FILE", "chat_sessions.json")
-MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "16"))
+MAX_HISTORY_TURNS = int(os.getenv("MAX_HISTORY_TURNS", "8"))  # 8 turns = 16 messages
+MAX_SESSIONS = int(os.getenv("MAX_SESSIONS", "1000"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "30"))
 
 # ---- Logging ----
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("app.log") if os.getenv("LOG_FILE") else logging.NullHandler()
+    ]
+)
 logger = logging.getLogger("bharath_ai_app")
 
 # ---- App init ----
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["JSON_SORT_KEYS"] = False
+CORS(app)  # ✅ FIX: Enable CORS for cross-origin requests
 
 # ---- In-memory stores ----
 chat_sessions = {}
@@ -98,6 +110,7 @@ def rate_limit():
                 entry["count"] += 1
                 if entry["count"] > RATE_LIMIT_MAX:
                     retry_after = int(RATE_LIMIT_WINDOW - (now - entry["window_start"]))
+                    logger.warning(f"Rate limit exceeded for IP: {ip}")
                     return jsonify({"error": "rate_limited", "retry_after": retry_after}), 429
             return f(*args, **kwargs)
         return wrapped
@@ -272,9 +285,15 @@ def get_enhanced_fallback(user_input):
 # ---- OpenRouter API call (requests) ----
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-def call_openrouter_api(messages, model="meta-llama/llama-3.2-3b-instruct:free", max_tokens=800, temperature=0.7, timeout=20):
+def call_openrouter_api(messages, model=None, max_tokens=800, temperature=0.7, timeout=30):
+    """
+    ✅ FIXED: Better error handling, timeout increased, detailed error messages
+    """
     if not OPENROUTER_API_KEY:
         raise RuntimeError("OPENROUTER_API_KEY not configured")
+
+    if model is None:
+        model = DEFAULT_MODEL
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -290,11 +309,34 @@ def call_openrouter_api(messages, model="meta-llama/llama-3.2-3b-instruct:free",
         "temperature": temperature
     }
 
-    resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=timeout)
+    try:
+        resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=timeout)
+    except requests.exceptions.Timeout:
+        logger.error("OpenRouter API timeout after %d seconds", timeout)
+        raise RuntimeError(f"OpenRouter API timeout after {timeout} seconds")
+    except requests.exceptions.ConnectionError as e:
+        logger.error("OpenRouter API connection error: %s", e)
+        raise RuntimeError("Cannot connect to OpenRouter API. Please check your internet connection.")
+    except Exception as e:
+        logger.error("OpenRouter API request error: %s", e)
+        raise RuntimeError(f"OpenRouter API request failed: {str(e)}")
+
+    # ✅ FIX: Better error handling for different status codes
     if resp.status_code != 200:
         text = resp.text
         logger.warning("OpenRouter API error %s: %s", resp.status_code, text[:400])
-        raise RuntimeError(f"OpenRouter API error {resp.status_code}: {text[:200]}")
+        
+        error_msg = f"OpenRouter API error {resp.status_code}"
+        if resp.status_code == 401:
+            error_msg = "Invalid API key. Please check OPENROUTER_API_KEY environment variable."
+        elif resp.status_code == 429:
+            error_msg = "Rate limit exceeded. Please try again later."
+        elif resp.status_code == 500:
+            error_msg = "OpenRouter service error. Please try again."
+        elif resp.status_code == 400:
+            error_msg = "Bad request to OpenRouter API. Check your model name and parameters."
+        
+        raise RuntimeError(f"{error_msg}: {text[:200]}")
 
     data = resp.json()
     try:
@@ -322,7 +364,26 @@ def call_openrouter_api(messages, model="meta-llama/llama-3.2-3b-instruct:free",
             return data["message"]
         return json.dumps(data["message"])
 
+    logger.error("Unexpected OpenRouter response: %s", json.dumps(data)[:500])
     raise RuntimeError("Unexpected OpenRouter response shape")
+
+# ---- Session cleanup ----
+def cleanup_old_sessions():
+    """
+    ✅ FIX: Prevent infinite session growth
+    """
+    if len(chat_sessions) > MAX_SESSIONS:
+        logger.info("Cleaning up old sessions (current: %d, max: %d)", len(chat_sessions), MAX_SESSIONS)
+        # Sort by last message timestamp (most recent first)
+        sorted_sessions = sorted(
+            chat_sessions.items(), 
+            key=lambda x: x[1][-1].get('ts', '') if x[1] else '', 
+            reverse=True
+        )
+        # Keep only the most recent MAX_SESSIONS
+        global chat_sessions
+        chat_sessions = dict(sorted_sessions[:MAX_SESSIONS])
+        logger.info("Kept %d most recent sessions", len(chat_sessions))
 
 # ---- Routes ----
 @app.route("/googlefa59b4f8aa3dd794.html")
@@ -350,6 +411,9 @@ def index():
 
 @app.route("/health")
 def health():
+    """
+    ✅ FIX: Added API key length for debugging (without exposing the key)
+    """
     personal = portfolio_data.get("personal_info", {})
     name = personal.get("name", "Janagam Bharath")
     projects = portfolio_data.get("projects", [])
@@ -359,12 +423,22 @@ def health():
     else:
         skills_count = len(skills_data) if isinstance(skills_data, list) else 0
     uptime = int((datetime.utcnow() - startup_time).total_seconds())
+    
+    api_configured = bool(OPENROUTER_API_KEY)
+    
+    # Log warning if API key not configured
+    if not api_configured:
+        logger.warning("Health check: OpenRouter API key NOT configured!")
+    
     return jsonify({
         "status": "healthy",
-        "api_configured": bool(OPENROUTER_API_KEY),
+        "api_configured": api_configured,
+        "api_key_length": len(OPENROUTER_API_KEY) if OPENROUTER_API_KEY else 0,
+        "model": DEFAULT_MODEL,
         "portfolio_name": name,
         "projects_count": len(projects),
         "skills_count": skills_count,
+        "active_sessions": len(chat_sessions),
         "uptime_seconds": uptime,
         "server_time_utc": datetime.utcnow().isoformat() + "Z"
     })
@@ -375,24 +449,61 @@ def portfolio():
 
 @app.route("/sessions")
 def sessions():
-    return jsonify({"session_count": len(chat_sessions), "sessions": {k: len(v) for k, v in chat_sessions.items()}})
+    return jsonify({
+        "session_count": len(chat_sessions), 
+        "sessions": {k: len(v) for k, v in chat_sessions.items()}
+    })
 
 @app.route("/ask", methods=["POST"])
 @rate_limit()
 def ask():
+    """
+    ✅ FIXED:
+    - UUID-based session IDs (no collision)
+    - Proper JSON error handling
+    - Consistent session trimming (16 messages = 8 turns)
+    - Request ID logging
+    - Better error messages
+    """
+    request_id = str(uuid.uuid4())[:8]
+    logger.info(f"[{request_id}] New chat request")
+    
     try:
-        data = request.get_json(silent=True) or {}
+        # ✅ FIX: Better JSON parsing with proper error handling
+        try:
+            data = request.get_json(force=True)
+            if not data:
+                logger.warning(f"[{request_id}] Empty JSON body")
+                return jsonify({"error": "invalid_json", "message": "Request body must be valid JSON"}), 400
+        except Exception as e:
+            logger.error(f"[{request_id}] JSON parse error: {e}")
+            return jsonify({"error": "invalid_json", "message": str(e)}), 400
+        
         user_input = (data.get("message") or "").strip()
-        session_id = data.get("session_id") or f"session_{int(time.time()*1000)}"
+        # ✅ FIX: Use UUID for session IDs to avoid collisions
+        session_id = data.get("session_id") or f"session_{uuid.uuid4().hex}"
 
         if not user_input:
-            return jsonify({"error": "message_required"}), 400
+            logger.warning(f"[{request_id}] Empty message")
+            return jsonify({"error": "message_required", "message": "Message cannot be empty"}), 400
 
+        logger.info(f"[{request_id}] Session: {session_id[:16]}..., Message: {user_input[:50]}...")
+
+        # Get or create session
         session = chat_sessions.setdefault(session_id, [])
-        session.append({"role": "user", "content": user_input, "ts": datetime.utcnow().isoformat()})
+        
+        # Add user message
+        session.append({
+            "role": "user", 
+            "content": user_input, 
+            "ts": datetime.utcnow().isoformat()
+        })
+        
+        # ✅ FIX: Consistent session trimming (keep last 16 messages = 8 turns)
         if len(session) > MAX_HISTORY_TURNS * 2:
-            session = session[-(MAX_HISTORY_TURNS):]
+            session = session[-(MAX_HISTORY_TURNS * 2):]
             chat_sessions[session_id] = session
+            logger.debug(f"[{request_id}] Trimmed session to {len(session)} messages")
 
         bot_reply = ""
         api_success = False
@@ -400,45 +511,79 @@ def ask():
         if OPENROUTER_API_KEY:
             try:
                 system_msg = {"role": "system", "content": get_system_prompt()}
-                recent = [{"role": m.get("role"), "content": m.get("content")} for m in session[-MAX_HISTORY_TURNS:]]
+                # ✅ FIX: Build message history correctly (last 16 messages = 8 turns)
+                recent = [
+                    {"role": m.get("role"), "content": m.get("content")} 
+                    for m in session[-(MAX_HISTORY_TURNS * 2):]
+                ]
                 messages = [system_msg] + recent
-                logger.info("Calling OpenRouter with %d messages (session=%s)", len(messages), session_id)
+                
+                logger.info(f"[{request_id}] Calling OpenRouter with {len(messages)} messages")
                 bot_reply = call_openrouter_api(messages)
                 api_success = True
-                logger.info("OpenRouter replied (len=%d chars)", len(bot_reply or ""))
+                logger.info(f"[{request_id}] OpenRouter replied ({len(bot_reply)} chars)")
+                
             except Exception as e:
-                logger.exception("OpenRouter API failed: %s", e)
+                logger.exception(f"[{request_id}] OpenRouter API failed: {e}")
                 bot_reply = get_enhanced_fallback(user_input)
                 api_success = False
+                logger.info(f"[{request_id}] Using fallback response")
         else:
-            logger.info("No OPENROUTER_API_KEY - using fallback.")
+            logger.warning(f"[{request_id}] No OPENROUTER_API_KEY - using fallback")
             bot_reply = get_enhanced_fallback(user_input)
             api_success = False
 
-        session.append({"role": "assistant", "content": bot_reply, "ts": datetime.utcnow().isoformat()})
-        if len(session) > MAX_HISTORY_TURNS:
-            chat_sessions[session_id] = session[-MAX_HISTORY_TURNS:]
+        # Add assistant response
+        session.append({
+            "role": "assistant", 
+            "content": bot_reply, 
+            "ts": datetime.utcnow().isoformat()
+        })
+        
+        # ✅ FIX: Consistent trimming after adding assistant message
+        if len(session) > MAX_HISTORY_TURNS * 2:
+            chat_sessions[session_id] = session[-(MAX_HISTORY_TURNS * 2):]
 
+        # Periodic save and cleanup
         if len(session) % 6 == 0:
             save_json_file(SESSIONS_FILE, chat_sessions)
+            cleanup_old_sessions()
 
+        logger.info(f"[{request_id}] Request completed successfully")
+        
         return jsonify({
             "reply": bot_reply,
             "session_id": session_id,
-            "status": "success" if api_success else "fallback"
+            "status": "success" if api_success else "fallback",
+            "request_id": request_id
         })
+        
     except Exception as e:
-        logger.exception("Unhandled error in /ask: %s", e)
+        logger.exception(f"[{request_id}] Unhandled error in /ask: {e}")
         personal = portfolio_data.get("personal_info", {})
         name = personal.get("name", "Janagam Bharath")
         return jsonify({
             "reply": f"Hi! I'm {name}'s AI assistant. Something went wrong — please try again.",
-            "status": "error"
-        }), 200
+            "status": "error",
+            "error": str(e),
+            "request_id": request_id
+        }), 500
 
 # ---- Main ----
 if __name__ == "__main__":
     personal = portfolio_data.get("personal_info", {})
-    logger.info("Starting %s's AI Assistant on port %s", personal.get("name", "Janagam Bharath"), PORT)
+    logger.info("=" * 60)
+    logger.info("Starting %s's AI Assistant", personal.get("name", "Janagam Bharath"))
+    logger.info("Port: %s", PORT)
     logger.info("OpenRouter API configured: %s", bool(OPENROUTER_API_KEY))
-    app.run(host="0.0.0.0", port=PORT, debug=os.getenv("FLASK_ENV") == "development")
+    if OPENROUTER_API_KEY:
+        logger.info("API Key length: %d characters", len(OPENROUTER_API_KEY))
+    logger.info("Default Model: %s", DEFAULT_MODEL)
+    logger.info("Max History Turns: %d (= %d messages)", MAX_HISTORY_TURNS, MAX_HISTORY_TURNS * 2)
+    logger.info("=" * 60)
+    
+    app.run(
+        host="0.0.0.0", 
+        port=PORT, 
+        debug=os.getenv("FLASK_ENV") == "development"
+    )
